@@ -18,7 +18,7 @@ bot.settings = {}
 # -------------------------
 # MONGO (MUST BE FIRST)
 # -------------------------
-client = MongoClient("mongodb+srv://mauriciobrian793_db_user:SJQ5sCtQVDyASCzp@fishyeconomybotcluster.ijsludq.mongodb.net/")
+client = MongoClient("mongodb+srv://mauriciobrian793_db_user:<db_password>@fishyeconomybotcluster.ijsludq.mongodb.net/")
 db = client["economy_db"]
 bot.economy = db["economy"]
 
