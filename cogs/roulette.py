@@ -76,6 +76,8 @@ class Roulette(commands.Cog):
     ])
     async def roulette(self, interaction: discord.Interaction, bet: int, choice: app_commands.Choice[str]):
 
+        await interaction.response.defer()
+
         if not interaction.guild:
             return await interaction.response.send_message("Guild only command.", ephemeral=True)
 

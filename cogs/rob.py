@@ -42,6 +42,8 @@ class Rob(commands.Cog):
     @app_commands.command(name="rob", description="Rob another user")
     async def rob(self, interaction: discord.Interaction, user: discord.Member):
 
+        await interaction.response.defer()
+
         if not interaction.guild:
             return await interaction.response.send_message(
                 "❌ This command can only be used in a server.",

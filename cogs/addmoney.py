@@ -42,6 +42,8 @@ class AddMoney(commands.Cog):
         amount: int
     ):
 
+        await interaction.response.defer()
+
         if interaction.guild is None:
             return await interaction.response.send_message(
                 "❌ This command can only be used in servers.",

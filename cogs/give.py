@@ -49,6 +49,8 @@ class Give(commands.Cog):
         amount: int
     ):
 
+        await interaction.response.defer()
+
         if not interaction.guild:
             return await interaction.response.send_message(
                 "❌ This command can only be used in a server.",

@@ -162,6 +162,8 @@ class Dashboard(commands.Cog):
     )
     async def dashboard(self, interaction: discord.Interaction):
 
+        await interaction.response.defer()
+
         if not interaction.guild:
             return await interaction.response.send_message(
                 "❌ Server only command.",

@@ -39,6 +39,8 @@ class Work(commands.Cog):
     )
     async def work(self, interaction: discord.Interaction):
 
+        await interaction.response.defer()
+
         if not interaction.guild:
             return await interaction.response.send_message("Guild only command.", ephemeral=True)
 

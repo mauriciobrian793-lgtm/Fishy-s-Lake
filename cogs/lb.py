@@ -87,6 +87,8 @@ class Leaderboard(commands.Cog):
     )
     async def leaderboard(self, interaction: discord.Interaction):
 
+        await interaction.response.defer()
+
         if not interaction.guild:
             return await interaction.response.send_message(
                 "❌ This command can only be used in a server.",

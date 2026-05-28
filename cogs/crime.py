@@ -34,6 +34,8 @@ class Crime(commands.Cog):
     @app_commands.command(name="crime", description="Commit a crime for money")
     async def crime(self, interaction: discord.Interaction):
 
+        await interaction.response.defer()
+
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
         allowed, remaining = check_cooldown(

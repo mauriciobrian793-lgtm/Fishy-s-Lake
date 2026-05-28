@@ -118,6 +118,8 @@ class FishRace(commands.Cog):
     @app_commands.command(name="fish_race", description="Bet on a fish race")
     async def fish_race(self, interaction: discord.Interaction, bet: int):
 
+        await interaction.response.defer()
+
         if not interaction.guild:
             return await interaction.response.send_message(
                 "❌ This command can only be used in a server.",

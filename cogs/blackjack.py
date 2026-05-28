@@ -55,6 +55,8 @@ class Blackjack(commands.Cog):
     )
     async def blackjack(self, interaction: discord.Interaction, bet: int):
 
+        await interaction.response.defer()
+
         if interaction.guild is None:
             return await interaction.response.send_message(
                 "❌ Must be used in a server.",
