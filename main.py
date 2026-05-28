@@ -26,12 +26,18 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="-", intents=intents)
 
+# shared config
 bot.settings = {}
 
 # -------------------------
-# MONGO (ASYNC - FIXED)
+# MONGO (ASYNC)
 # -------------------------
-client = AsyncIOMotorClient(MONGO_URL)
+client = AsyncIOMotorClient(
+    MONGO_URL,
+    serverSelectionTimeoutMS=5000,  # prevents long freezing
+    connectTimeoutMS=5000
+)
+
 db = client["economy_db"]
 bot.economy = db["economy"]
 
