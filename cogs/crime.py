@@ -1,49 +1,41 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import json
 import random
-import os
 from utils import check_cooldown
 
-ECONOMY_FILE = "economy.json"
-
-
-# -------------------------
-# LOAD / SAVE
-# -------------------------
-def load_economy():
-    if not os.path.exists(ECONOMY_FILE):
-        return {}
-
-    with open(ECONOMY_FILE, "r") as f:
-        return json.load(f)
-
-
-def save_economy(data):
-    with open(ECONOMY_FILE, "w") as f:
-        json.dump(data, f, indent=4)
-
-
-# -------------------------
-# COG
-# -------------------------
 class Crime(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.economy = bot.economy
 
-    @app_commands.command(
-        name="crime",
-        description="Commit a crime for money"
-    )
+    def get_user(self, guild_id, user_id, name):
+        return self.economy.find_one_and_update(
+            {"guild_id": str(guild_id), "user_id": str(user_id)},
+            {
+                "$setOnInsert": {
+                    "guild_id": str(guild_id),
+                    "user_id": str(user_id),
+                    "name": name,
+                    "balance": 0
+                }
+            },
+            upsert=True,
+            return_document=True
+        )
+
+    def update_balance(self, guild_id, user_id, amount):
+        self.economy.update_one(
+            {"guild_id": str(guild_id), "user_id": str(user_id)},
+            {"$inc": {"balance": amount}}
+        )
+
+    @app_commands.command(name="crime", description="Commit a crime for money")
     async def crime(self, interaction: discord.Interaction):
 
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
-        # =========================
-        # COOLDOWN
-        # =========================
         allowed, remaining = check_cooldown(
             interaction.guild.id,
             interaction.user.id,
@@ -57,102 +49,65 @@ class Crime(commands.Cog):
                 ephemeral=True
             )
 
-        economy = load_economy()
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
 
-        # -------------------------
-        # USER KEY
-        # -------------------------
-        user_id = f"{interaction.guild.id}_{interaction.user.id}"
-
-        # ensure user exists
-        if user_id not in economy:
-            economy[user_id] = {
-                "balance": 0,
-                "name": interaction.user.name
-            }
+        user = self.get_user(guild_id, user_id, interaction.user.name)
 
         success = random.randint(1, 100) <= 40
 
-        # -------------------------
-        # SUCCESS
-        # -------------------------
         if success:
+            earnings = random.randint(100, 10000)
+            self.update_balance(guild_id, user_id, earnings)
 
-            earnings = random.randint(0, 10000)
-
-            economy[user_id]["balance"] += earnings
-            economy[user_id]["name"] = interaction.user.name
-
-            save_economy(economy)
-
-            success_messages = [
+            msg = random.choice([
                 "You robbed a bank vault 🏦",
                 "You hacked an ATM 💻",
                 "You stole a luxury car 🚗",
                 "You robbed a jewelry store 💎",
-            ]
+            ])
 
             embed = discord.Embed(
                 title="🚔 Crime Successful!",
-                description=random.choice(success_messages),
+                description=msg,
                 color=discord.Color.green()
             )
 
-            embed.add_field(
-                name="💰 Earned",
-                value=f"${earnings}",
-                inline=True
-            )
+            embed.add_field(name="💰 Earned", value=f"${earnings}", inline=True)
 
-        # -------------------------
-        # FAIL
-        # -------------------------
         else:
-
             loss = random.randint(1, 1000)
 
-            balance = economy[user_id].get("balance", 0)
+            current = user.get("balance", 0)
+            loss = min(loss, current)
 
-            if loss > balance:
-                loss = balance
+            self.update_balance(guild_id, user_id, -loss)
 
-            economy[user_id]["balance"] = balance - loss
-
-            save_economy(economy)
-
-            fail_messages = [
+            msg = random.choice([
                 "You got caught by the police 🚓",
                 "Security stopped you 🛑",
                 "You failed the robbery 💸",
                 "You tripped while escaping 😭",
-            ]
+            ])
 
             embed = discord.Embed(
                 title="❌ Crime Failed!",
-                description=random.choice(fail_messages),
+                description=msg,
                 color=discord.Color.red()
             )
 
-            embed.add_field(
-                name="💸 Lost",
-                value=f"${loss}",
-                inline=True
-            )
+            embed.add_field(name="💸 Lost", value=f"${loss}", inline=True)
 
-        # -------------------------
-        # BALANCE
-        # -------------------------
+        updated = self.get_user(guild_id, user_id, interaction.user.name)
+
         embed.add_field(
             name="🏦 Balance",
-            value=f"${economy[user_id]['balance']}",
+            value=f"${updated.get('balance', 0)}",
             inline=True
         )
 
         await interaction.response.send_message(embed=embed)
 
 
-# -------------------------
-# SETUP
-# -------------------------
 async def setup(bot):
     await bot.add_cog(Crime(bot))

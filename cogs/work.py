@@ -3,17 +3,15 @@ from discord.ext import commands
 from discord import app_commands
 import random
 from utils import check_cooldown
+from pymongo import ReturnDocument
 
 
 class Work(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.economy = bot.economy  # MongoDB collection
+        self.economy = bot.economy
 
-    # =========================
-    # GET OR CREATE USER
-    # =========================
     def get_user(self, guild_id, user_id, name):
         return self.economy.find_one_and_update(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
@@ -26,26 +24,23 @@ class Work(commands.Cog):
                 }
             },
             upsert=True,
-            return_document=True
+            return_document=ReturnDocument.AFTER
         )
 
-    # =========================
-    # UPDATE BALANCE
-    # =========================
     def update_balance(self, guild_id, user_id, amount):
         self.economy.update_one(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
             {"$inc": {"balance": amount}}
         )
 
-    # =========================
-    # COMMAND
-    # =========================
     @app_commands.command(
         name="work",
         description="Work to earn money"
     )
     async def work(self, interaction: discord.Interaction):
+
+        if not interaction.guild:
+            return await interaction.response.send_message("Guild only command.", ephemeral=True)
 
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
@@ -62,11 +57,6 @@ class Work(commands.Cog):
                 ephemeral=True
             )
 
-        guild_id = interaction.guild.id
-        user_id = interaction.user.id
-
-        user = self.get_user(guild_id, user_id, interaction.user.name)
-
         earnings = random.randint(100, 2000)
 
         jobs = [
@@ -80,10 +70,13 @@ class Work(commands.Cog):
 
         result_text = random.choice(jobs)
 
-        # add money
-        self.update_balance(guild_id, user_id, earnings)
+        self.update_balance(interaction.guild.id, interaction.user.id, earnings)
 
-        updated = self.get_user(guild_id, user_id, interaction.user.name)
+        updated = self.get_user(
+            interaction.guild.id,
+            interaction.user.id,
+            interaction.user.name
+        )
 
         embed = discord.Embed(
             title="💼 Work Result",
@@ -91,17 +84,8 @@ class Work(commands.Cog):
             color=discord.Color.green()
         )
 
-        embed.add_field(
-            name="💰 Earned",
-            value=f"${earnings}",
-            inline=True
-        )
-
-        embed.add_field(
-            name="🏦 Balance",
-            value=f"${updated.get('balance', 0)}",
-            inline=True
-        )
+        embed.add_field(name="💰 Earned", value=f"${earnings}", inline=True)
+        embed.add_field(name="🏦 Balance", value=f"${updated.get('balance', 0)}", inline=True)
 
         await interaction.response.send_message(embed=embed)
 

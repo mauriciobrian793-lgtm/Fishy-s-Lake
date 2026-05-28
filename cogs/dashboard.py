@@ -4,13 +4,13 @@ from discord import app_commands
 
 
 # =========================
-# ROLE INCOME SELECT
+# ROLE INCOME MODAL
 # =========================
 class IncomeRoleModal(discord.ui.Modal):
 
     def __init__(self, role_id, bot):
         super().__init__(title="Set Role Income")
-        self.role_id = role_id
+        self.role_id = str(role_id)
         self.bot = bot
 
         self.amount = discord.ui.TextInput(
@@ -36,7 +36,7 @@ class IncomeRoleModal(discord.ui.Modal):
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
         role_income = settings.setdefault("role_income", {})
 
-        role_income[self.role_id] = amount
+        role_income[str(self.role_id)] = amount
 
         await interaction.response.send_message(
             f"💰 Role income set: <@&{self.role_id}> → ${amount}",
@@ -45,36 +45,8 @@ class IncomeRoleModal(discord.ui.Modal):
 
 
 # =========================
-# COMMAND SELECT (COOLDOWNS)
+# COOLDOWN MODAL
 # =========================
-class CommandSelect(discord.ui.Select):
-
-    def __init__(self):
-        options = [
-            discord.SelectOption(label="work"),
-            discord.SelectOption(label="crime"),
-            discord.SelectOption(label="rob"),
-            discord.SelectOption(label="roulette"),
-            discord.SelectOption(label="fish_race"),
-            discord.SelectOption(label="blackjack"),
-            discord.SelectOption(label="collect_income"),
-        ]
-
-        super().__init__(
-            placeholder="Select command cooldown",
-            options=options
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(CooldownModal(self.values[0], interaction.client))
-
-
-class CommandView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=60)
-        self.add_item(CommandSelect())
-
-
 class CooldownModal(discord.ui.Modal):
 
     def __init__(self, command, bot):
@@ -114,24 +86,60 @@ class CooldownModal(discord.ui.Modal):
 
 
 # =========================
-# ROLE SELECT (INCOME ROLE PICKER)
+# COMMAND SELECT
 # =========================
-class RoleSelect(discord.ui.Select):
+class CommandSelect(discord.ui.Select):
 
-    def __init__(self, roles):
+    def __init__(self):
         options = [
-            discord.SelectOption(label=r.name, value=str(r.id))
-            for r in roles[:25]
+            discord.SelectOption(label="work"),
+            discord.SelectOption(label="crime"),
+            discord.SelectOption(label="rob"),
+            discord.SelectOption(label="roulette"),
+            discord.SelectOption(label="fish_race"),
+            discord.SelectOption(label="blackjack"),
+            discord.SelectOption(label="collect_income"),
         ]
 
         super().__init__(
-            placeholder="Select role to set income",
+            placeholder="Select command cooldown",
             options=options
         )
 
     async def callback(self, interaction: discord.Interaction):
-        role_id = self.values[0]
-        await interaction.response.send_modal(IncomeRoleModal(role_id, interaction.client))
+        await interaction.response.send_modal(
+            CooldownModal(self.values[0], interaction.client)
+        )
+
+
+class CommandView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        self.add_item(CommandSelect())
+
+
+# =========================
+# ROLE SELECT
+# =========================
+class RoleSelect(discord.ui.Select):
+
+    def __init__(self, roles):
+        roles = roles[:25]  # hard safety cap
+
+        options = [
+            discord.SelectOption(label=r.name[:100], value=str(r.id))
+            for r in roles
+        ]
+
+        super().__init__(
+            placeholder="Select role",
+            options=options
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(
+            IncomeRoleModal(self.values[0], interaction.client)
+        )
 
 
 class RoleView(discord.ui.View):
@@ -154,7 +162,12 @@ class Dashboard(commands.Cog):
     )
     async def dashboard(self, interaction: discord.Interaction):
 
-        # ADMIN ONLY DASHBOARD
+        if not interaction.guild:
+            return await interaction.response.send_message(
+                "❌ Server only command.",
+                ephemeral=True
+            )
+
         if not interaction.user.guild_permissions.administrator:
             return await interaction.response.send_message(
                 "❌ Admin only.",
@@ -168,9 +181,6 @@ class Dashboard(commands.Cog):
         cooldowns = settings.get("cooldowns", {})
         role_income = settings.get("role_income", {})
 
-        # =========================
-        # EMBED
-        # =========================
         embed = discord.Embed(
             title="⚙️ Economy Dashboard",
             color=discord.Color.dark_grey()

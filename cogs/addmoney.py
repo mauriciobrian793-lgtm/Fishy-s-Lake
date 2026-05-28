@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from pymongo import ReturnDocument
 
 
 class AddMoney(commands.Cog):
@@ -10,14 +11,11 @@ class AddMoney(commands.Cog):
         self.economy = bot.economy
 
     # -------------------------
-    # GET OR CREATE USER
+    # GET OR CREATE USER (FIXED)
     # -------------------------
     def get_user(self, guild_id, user_id, name):
         return self.economy.find_one_and_update(
-            {
-                "guild_id": str(guild_id),
-                "user_id": str(user_id)
-            },
+            {"guild_id": str(guild_id), "user_id": str(user_id)},
             {
                 "$setOnInsert": {
                     "guild_id": str(guild_id),
@@ -27,7 +25,7 @@ class AddMoney(commands.Cog):
                 }
             },
             upsert=True,
-            return_document=True
+            return_document=ReturnDocument.AFTER
         )
 
     # -------------------------
@@ -44,40 +42,42 @@ class AddMoney(commands.Cog):
         amount: int
     ):
 
-        # =========================
-        # SETTINGS LOAD (SAFE)
-        # =========================
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "❌ This command can only be used in servers.",
+                ephemeral=True
+            )
+
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
-        # =========================
-        # ADMIN ROLE CHECK
-        # =========================
+        # -------------------------
+        # ADMIN ROLE CHECK (SAFE)
+        # -------------------------
         admin_role_id = settings.get("admin_role_id")
 
         if admin_role_id:
-            if str(admin_role_id) not in [str(r.id) for r in interaction.user.roles]:
+            if not any(str(r.id) == str(admin_role_id) for r in interaction.user.roles):
                 return await interaction.response.send_message(
                     "❌ You are not allowed to use this command.",
                     ephemeral=True
                 )
 
-        # =========================
+        # -------------------------
         # VALIDATION
-        # =========================
+        # -------------------------
         if amount <= 0:
             return await interaction.response.send_message(
                 "❌ Amount must be greater than 0.",
                 ephemeral=True
             )
 
-        # =========================
+        guild_id = interaction.guild.id
+
+        # -------------------------
         # UPDATE USER
-        # =========================
+        # -------------------------
         self.economy.update_one(
-            {
-                "guild_id": str(interaction.guild.id),
-                "user_id": str(user.id)
-            },
+            {"guild_id": str(guild_id), "user_id": str(user.id)},
             {
                 "$inc": {"balance": amount},
                 "$set": {"name": user.name}
@@ -85,17 +85,11 @@ class AddMoney(commands.Cog):
             upsert=True
         )
 
-        # =========================
-        # GET UPDATED DATA
-        # =========================
-        updated = self.economy.find_one({
-            "guild_id": str(interaction.guild.id),
-            "user_id": str(user.id)
-        }) or {"balance": 0}
+        updated = self.get_user(guild_id, user.id, user.name)
 
-        # =========================
+        # -------------------------
         # EMBED
-        # =========================
+        # -------------------------
         embed = discord.Embed(
             title="💰 Money Added",
             description=f"Gave money to {user.mention}",

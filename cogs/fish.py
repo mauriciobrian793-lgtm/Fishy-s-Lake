@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import random
 from utils import check_cooldown
+from pymongo import ReturnDocument
 
 
 FISHES = ["🐟 Blue Fish", "🐠 Gold Fish", "🐡 Red Fish", "🦈 Shark", "🐙 Octo Fish"]
@@ -37,7 +38,7 @@ class FishRaceView(discord.ui.View):
                 }
             },
             upsert=True,
-            return_document=True
+            return_document=ReturnDocument.AFTER
         )
 
     def update_balance(self, amount):
@@ -56,16 +57,19 @@ class FishRaceView(discord.ui.View):
 
         self.finished = True
 
-        user = self.get_user()
+        # disable buttons immediately (prevents spam)
+        for item in self.children:
+            item.disabled = True
 
-        # WIN
         if choice == self.winner:
             payout = self.bet * 4
-            self.update_balance(payout - self.bet)  # profit only
-            result = f"🎉 You WON! +${payout - self.bet}"
+            profit = payout - self.bet
+
+            self.update_balance(profit)
+
+            result = f"🎉 You WON! +${profit}"
             color = discord.Color.green()
 
-        # LOSS
         else:
             result = f"💀 You lost! Winner was {self.winner}"
             color = discord.Color.red()
@@ -75,9 +79,6 @@ class FishRaceView(discord.ui.View):
             description=result,
             color=color
         )
-
-        for item in self.children:
-            item.disabled = True
 
         await interaction.response.edit_message(embed=embed, view=self)
 
@@ -112,15 +113,19 @@ class FishRace(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.economy = bot.economy
 
     @app_commands.command(name="fish_race", description="Bet on a fish race")
     async def fish_race(self, interaction: discord.Interaction, bet: int):
 
+        if not interaction.guild:
+            return await interaction.response.send_message(
+                "❌ This command can only be used in a server.",
+                ephemeral=True
+            )
+
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
-        # =========================
-        # COOLDOWN
-        # =========================
         allowed, remaining = check_cooldown(
             interaction.guild.id,
             interaction.user.id,
@@ -143,7 +148,7 @@ class FishRace(commands.Cog):
         guild_id = interaction.guild.id
         user_id = interaction.user.id
 
-        user = self.bot.economy.find_one_and_update(
+        user = self.economy.find_one_and_update(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
             {
                 "$setOnInsert": {
@@ -153,7 +158,7 @@ class FishRace(commands.Cog):
                 }
             },
             upsert=True,
-            return_document=True
+            return_document=ReturnDocument.AFTER
         )
 
         if user.get("balance", 0) < bet:
@@ -163,7 +168,7 @@ class FishRace(commands.Cog):
             )
 
         # take bet
-        self.bot.economy.update_one(
+        self.economy.update_one(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
             {"$inc": {"balance": -bet}}
         )

@@ -55,9 +55,21 @@ class Blackjack(commands.Cog):
     )
     async def blackjack(self, interaction: discord.Interaction, bet: int):
 
-        # =========================
-        # SETTINGS + COOLDOWN
-        # =========================
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "❌ Must be used in a server.",
+                ephemeral=True
+            )
+
+        # -------------------------
+        # VALIDATION FIRST
+        # -------------------------
+        if bet <= 0:
+            return await interaction.response.send_message(
+                "❌ Bet must be higher than 0.",
+                ephemeral=True
+            )
+
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
         allowed, remaining = check_cooldown(
@@ -77,15 +89,6 @@ class Blackjack(commands.Cog):
         user_id = interaction.user.id
 
         user = self.get_user(guild_id, user_id, interaction.user.name)
-
-        # -------------------------
-        # VALIDATION
-        # -------------------------
-        if bet <= 0:
-            return await interaction.response.send_message(
-                "❌ Bet must be higher than 0.",
-                ephemeral=True
-            )
 
         if user.get("balance", 0) < bet:
             return await interaction.response.send_message(
@@ -134,7 +137,7 @@ class Blackjack(commands.Cog):
             win = False
 
         # -------------------------
-        # PAYOUT
+        # PAYOUT (FIXED LOGIC)
         # -------------------------
         if win is True:
             self.economy.update_one(
@@ -154,10 +157,8 @@ class Blackjack(commands.Cog):
         # EMBED
         # -------------------------
         color = (
-            discord.Color.green()
-            if win is True else
-            discord.Color.gold()
-            if win == "tie" else
+            discord.Color.green() if win is True else
+            discord.Color.gold() if win == "tie" else
             discord.Color.red()
         )
 
@@ -167,8 +168,18 @@ class Blackjack(commands.Cog):
             color=color
         )
 
-        embed.add_field(name="Your Hand", value=f"{player} = {player_total}", inline=False)
-        embed.add_field(name="Dealer Hand", value=f"{dealer} = {dealer_total}", inline=False)
+        embed.add_field(
+            name="Your Hand",
+            value=f"{player} = {player_total}",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Dealer Hand",
+            value=f"{dealer} = {dealer_total}",
+            inline=False
+        )
+
         embed.add_field(name="Bet", value=f"${bet}", inline=True)
         embed.add_field(name="Balance", value=f"${updated.get('balance', 0)}", inline=True)
 

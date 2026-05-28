@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from utils import check_cooldown
+from pymongo import ReturnDocument
 
 
 class CollectIncome(commands.Cog):
@@ -11,14 +12,11 @@ class CollectIncome(commands.Cog):
         self.economy = bot.economy
 
     # -------------------------
-    # GET OR CREATE USER
+    # GET OR CREATE USER (FIXED)
     # -------------------------
     def get_user(self, guild_id, user_id, name):
         return self.economy.find_one_and_update(
-            {
-                "guild_id": str(guild_id),
-                "user_id": str(user_id)
-            },
+            {"guild_id": str(guild_id), "user_id": str(user_id)},
             {
                 "$setOnInsert": {
                     "guild_id": str(guild_id),
@@ -28,19 +26,23 @@ class CollectIncome(commands.Cog):
                 }
             },
             upsert=True,
-            return_document=True
+            return_document=ReturnDocument.AFTER
         )
 
     # -------------------------
-    # ADD MONEY
+    # ADD MONEY (FIXED)
     # -------------------------
     def add_money(self, guild_id, user_id, amount):
         self.economy.update_one(
+            {"guild_id": str(guild_id), "user_id": str(user_id)},
             {
-                "guild_id": str(guild_id),
-                "user_id": str(user_id)
+                "$inc": {"balance": amount},
+                "$setOnInsert": {
+                    "guild_id": str(guild_id),
+                    "user_id": str(user_id),
+                    "balance": 0
+                }
             },
-            {"$inc": {"balance": amount}},
             upsert=True
         )
 
@@ -53,17 +55,20 @@ class CollectIncome(commands.Cog):
     )
     async def collect_income(self, interaction: discord.Interaction):
 
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "❌ This command can only be used in a server.",
+                ephemeral=True
+            )
+
         guild_id = str(interaction.guild.id)
         user = interaction.user
 
-        # =========================
-        # SETTINGS
-        # =========================
         settings = self.bot.settings.setdefault(guild_id, {})
 
-        # =========================
-        # COOLDOWN (FIXED)
-        # =========================
+        # -------------------------
+        # COOLDOWN
+        # -------------------------
         allowed, remaining = check_cooldown(
             interaction.guild.id,
             interaction.user.id,
@@ -77,9 +82,6 @@ class CollectIncome(commands.Cog):
                 ephemeral=True
             )
 
-        # =========================
-        # ROLE INCOME DATA
-        # =========================
         role_income = settings.get("role_income", {})
 
         if not role_income:
@@ -105,15 +107,15 @@ class CollectIncome(commands.Cog):
                 ephemeral=True
             )
 
-        # =========================
+        # -------------------------
         # GIVE MONEY
-        # =========================
+        # -------------------------
         self.add_money(guild_id, user.id, total)
         updated = self.get_user(guild_id, user.id, user.name)
 
-        # =========================
+        # -------------------------
         # EMBED
-        # =========================
+        # -------------------------
         embed = discord.Embed(
             title="💰 Income Collected",
             color=discord.Color.green()

@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from pymongo import ReturnDocument
 from utils import check_cooldown
 
 
@@ -11,14 +12,11 @@ class Balance(commands.Cog):
         self.economy = bot.economy
 
     # -------------------------
-    # GET OR CREATE USER
+    # GET OR CREATE USER (FIXED)
     # -------------------------
     def get_user(self, guild_id, user_id, name):
         return self.economy.find_one_and_update(
-            {
-                "guild_id": str(guild_id),
-                "user_id": str(user_id)
-            },
+            {"guild_id": str(guild_id), "user_id": str(user_id)},
             {
                 "$setOnInsert": {
                     "guild_id": str(guild_id),
@@ -28,7 +26,7 @@ class Balance(commands.Cog):
                 }
             },
             upsert=True,
-            return_document=True
+            return_document=ReturnDocument.AFTER
         )
 
     # -------------------------
@@ -40,11 +38,17 @@ class Balance(commands.Cog):
     )
     async def balance(self, interaction: discord.Interaction, user: discord.Member = None):
 
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "❌ This command can only be used in servers.",
+                ephemeral=True
+            )
+
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
-        # =========================
+        # -------------------------
         # COOLDOWN
-        # =========================
+        # -------------------------
         allowed, remaining = check_cooldown(
             interaction.guild.id,
             interaction.user.id,
@@ -58,9 +62,9 @@ class Balance(commands.Cog):
                 ephemeral=True
             )
 
-        # =========================
-        # DEFAULT USER FIX
-        # =========================
+        # -------------------------
+        # DEFAULT USER
+        # -------------------------
         if user is None:
             user = interaction.user
 
@@ -72,9 +76,9 @@ class Balance(commands.Cog):
 
         balance = data.get("balance", 0)
 
-        # =========================
+        # -------------------------
         # EMBED
-        # =========================
+        # -------------------------
         embed = discord.Embed(
             title="🏦 Balance",
             color=discord.Color.green()

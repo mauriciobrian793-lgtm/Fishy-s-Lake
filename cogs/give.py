@@ -2,33 +2,32 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from utils import check_cooldown
+from pymongo import ReturnDocument
 
 
 class Give(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.economy = bot.economy  # MongoDB collection
+        self.economy = bot.economy
 
     # =========================
     # USER SYSTEM
     # =========================
     def get_user(self, guild_id, user_id, username):
-        data = self.economy.find_one({
-            "guild_id": str(guild_id),
-            "user_id": str(user_id)
-        })
-
-        if not data:
-            data = {
-                "guild_id": str(guild_id),
-                "user_id": str(user_id),
-                "name": username,
-                "balance": 0
-            }
-            self.economy.insert_one(data)
-
-        return data
+        return self.economy.find_one_and_update(
+            {"guild_id": str(guild_id), "user_id": str(user_id)},
+            {
+                "$setOnInsert": {
+                    "guild_id": str(guild_id),
+                    "user_id": str(user_id),
+                    "name": username,
+                    "balance": 0
+                }
+            },
+            upsert=True,
+            return_document=ReturnDocument.AFTER
+        )
 
     def update_balance(self, guild_id, user_id, amount):
         self.economy.update_one(
@@ -50,11 +49,20 @@ class Give(commands.Cog):
         amount: int
     ):
 
+        if not interaction.guild:
+            return await interaction.response.send_message(
+                "❌ This command can only be used in a server.",
+                ephemeral=True
+            )
+
+        if user.bot:
+            return await interaction.response.send_message(
+                "❌ You cannot give money to bots.",
+                ephemeral=True
+            )
+
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
-        # =========================
-        # COOLDOWN CHECK
-        # =========================
         allowed, remaining = check_cooldown(
             interaction.guild.id,
             interaction.user.id,
@@ -68,9 +76,6 @@ class Give(commands.Cog):
                 ephemeral=True
             )
 
-        # =========================
-        # VALIDATION
-        # =========================
         if user.id == interaction.user.id:
             return await interaction.response.send_message(
                 "❌ You can't give money to yourself.",
@@ -102,11 +107,9 @@ class Give(commands.Cog):
         self.update_balance(guild_id, interaction.user.id, -amount)
         self.update_balance(guild_id, user.id, amount)
 
-        new_balance = giver_balance - amount
+        # re-fetch updated giver data (IMPORTANT FIX)
+        updated_giver = self.get_user(guild_id, interaction.user.id, interaction.user.name)
 
-        # =========================
-        # EMBED
-        # =========================
         embed = discord.Embed(
             title="💸 Money Transferred",
             color=discord.Color.green()
@@ -115,7 +118,11 @@ class Give(commands.Cog):
         embed.add_field(name="👤 From", value=interaction.user.mention, inline=True)
         embed.add_field(name="👤 To", value=user.mention, inline=True)
         embed.add_field(name="💰 Amount", value=f"${amount}", inline=False)
-        embed.add_field(name="🏦 Your New Balance", value=f"${new_balance}", inline=False)
+        embed.add_field(
+            name="🏦 Your New Balance",
+            value=f"${updated_giver.get('balance', 0)}",
+            inline=False
+        )
 
         await interaction.response.send_message(embed=embed)
 

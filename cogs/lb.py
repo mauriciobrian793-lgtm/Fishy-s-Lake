@@ -10,13 +10,18 @@ from utils import check_cooldown
 # =========================
 class LeaderboardView(discord.ui.View):
 
-    def __init__(self, users, page=0):
+    def __init__(self, users):
         super().__init__(timeout=120)
         self.users = users
-        self.page = page
+        self.page = 0
         self.per_page = 10
 
     def create_embed(self):
+
+        total_pages = max(1, math.ceil(len(self.users) / self.per_page))
+
+        # clamp page so it never goes out of range
+        self.page = max(0, min(self.page, total_pages - 1))
 
         start = self.page * self.per_page
         end = start + self.per_page
@@ -27,20 +32,18 @@ class LeaderboardView(discord.ui.View):
             color=discord.Color.gold()
         )
 
-        text = ""
+        if not current:
+            embed.description = "No users found."
+            return embed
 
+        text = ""
         for i, doc in enumerate(current, start=start + 1):
             name = doc.get("name", "Unknown User")
             balance = doc.get("balance", 0)
             text += f"**#{i}** • {name} — `${balance}`\n"
 
-        if not text:
-            text = "No users found."
-
-        pages = max(1, math.ceil(len(self.users) / self.per_page))
-
         embed.description = text
-        embed.set_footer(text=f"Page {self.page + 1}/{pages}")
+        embed.set_footer(text=f"Page {self.page + 1}/{total_pages}")
 
         return embed
 
@@ -58,9 +61,9 @@ class LeaderboardView(discord.ui.View):
     @discord.ui.button(label="➡️", style=discord.ButtonStyle.gray)
     async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
 
-        max_page = max(0, math.ceil(len(self.users) / self.per_page) - 1)
+        total_pages = max(1, math.ceil(len(self.users) / self.per_page))
 
-        if self.page < max_page:
+        if self.page < total_pages - 1:
             self.page += 1
 
         await interaction.response.edit_message(
@@ -76,7 +79,7 @@ class Leaderboard(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.economy = bot.economy  # MongoDB collection
+        self.economy = bot.economy
 
     @app_commands.command(
         name="leaderboard",
@@ -84,11 +87,14 @@ class Leaderboard(commands.Cog):
     )
     async def leaderboard(self, interaction: discord.Interaction):
 
+        if not interaction.guild:
+            return await interaction.response.send_message(
+                "❌ This command can only be used in a server.",
+                ephemeral=True
+            )
+
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
-        # =========================
-        # COOLDOWN CHECK (FIXED)
-        # =========================
         allowed, remaining = check_cooldown(
             interaction.guild.id,
             interaction.user.id,
@@ -104,9 +110,6 @@ class Leaderboard(commands.Cog):
 
         guild_id = str(interaction.guild.id)
 
-        # =========================
-        # GET USERS
-        # =========================
         users = list(self.economy.find({"guild_id": guild_id}))
 
         if not users:
@@ -115,9 +118,6 @@ class Leaderboard(commands.Cog):
                 ephemeral=True
             )
 
-        # =========================
-        # SORT BY BALANCE
-        # =========================
         users = sorted(
             users,
             key=lambda x: x.get("balance", 0),

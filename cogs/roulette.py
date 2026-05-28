@@ -4,6 +4,7 @@ from discord import app_commands
 import random
 import asyncio
 from utils import check_cooldown
+from pymongo import ReturnDocument
 
 
 RED_NUMBERS = {
@@ -27,7 +28,7 @@ class Roulette(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.economy = bot.economy  # MongoDB collection
+        self.economy = bot.economy
 
     # =========================
     # USER SYSTEM
@@ -44,7 +45,7 @@ class Roulette(commands.Cog):
                 }
             },
             upsert=True,
-            return_document=True
+            return_document=ReturnDocument.AFTER
         )
 
     def update_balance(self, guild_id, user_id, amount):
@@ -75,11 +76,11 @@ class Roulette(commands.Cog):
     ])
     async def roulette(self, interaction: discord.Interaction, bet: int, choice: app_commands.Choice[str]):
 
+        if not interaction.guild:
+            return await interaction.response.send_message("Guild only command.", ephemeral=True)
+
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
-        # =========================
-        # COOLDOWN CHECK
-        # =========================
         allowed, remaining = check_cooldown(
             interaction.guild.id,
             interaction.user.id,
@@ -93,9 +94,6 @@ class Roulette(commands.Cog):
                 ephemeral=True
             )
 
-        # =========================
-        # VALID BET
-        # =========================
         if bet <= 0:
             return await interaction.response.send_message(
                 "❌ Bet must be higher than 0.",
@@ -113,29 +111,24 @@ class Roulette(commands.Cog):
                 ephemeral=True
             )
 
-        # take bet immediately
+        # remove bet
         self.update_balance(guild_id, user_id, -bet)
 
-        # =========================
-        # SPIN MESSAGE
-        # =========================
-        embed = discord.Embed(
+        spin = discord.Embed(
             title="🎡 Spinning Roulette...",
             description="The wheel is spinning...",
             color=discord.Color.dark_grey()
         )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=spin)
 
         await asyncio.sleep(2)
 
-        # =========================
-        # ROLL RESULT
-        # =========================
         number = random.randint(0, 36)
         color = get_color(number)
 
         c = choice.value
+
         win = False
         multiplier = 0
 
@@ -167,9 +160,6 @@ class Roulette(commands.Cog):
             win = 25 <= number <= 36
             multiplier = 3
 
-        # =========================
-        # PAYOUT
-        # =========================
         if win:
             payout = bet * multiplier
             self.update_balance(guild_id, user_id, payout)
@@ -182,9 +172,6 @@ class Roulette(commands.Cog):
 
         updated = self.get_user(guild_id, user_id, interaction.user.name)
 
-        # =========================
-        # FINAL EMBED
-        # =========================
         result = discord.Embed(
             title="🎡 Roulette Result",
             color=color_embed

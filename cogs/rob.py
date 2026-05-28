@@ -3,13 +3,14 @@ from discord.ext import commands
 from discord import app_commands
 import random
 from utils import check_cooldown
+from pymongo import ReturnDocument
 
 
 class Rob(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.economy = bot.economy  # MongoDB collection
+        self.economy = bot.economy
 
     # =========================
     # USER SYSTEM
@@ -26,7 +27,7 @@ class Rob(commands.Cog):
                 }
             },
             upsert=True,
-            return_document=True
+            return_document=ReturnDocument.AFTER
         )
 
     def update_balance(self, guild_id, user_id, amount):
@@ -41,11 +42,26 @@ class Rob(commands.Cog):
     @app_commands.command(name="rob", description="Rob another user")
     async def rob(self, interaction: discord.Interaction, user: discord.Member):
 
+        if not interaction.guild:
+            return await interaction.response.send_message(
+                "❌ This command can only be used in a server.",
+                ephemeral=True
+            )
+
+        if user.bot:
+            return await interaction.response.send_message(
+                "❌ You cannot rob bots.",
+                ephemeral=True
+            )
+
+        if interaction.user.id == user.id:
+            return await interaction.response.send_message(
+                "❌ You cannot rob yourself.",
+                ephemeral=True
+            )
+
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
-        # =========================
-        # COOLDOWN CHECK
-        # =========================
         allowed, remaining = check_cooldown(
             interaction.guild.id,
             interaction.user.id,
@@ -59,26 +75,13 @@ class Rob(commands.Cog):
                 ephemeral=True
             )
 
-        # =========================
-        # SELF ROB CHECK
-        # =========================
-        if interaction.user.id == user.id:
-            return await interaction.response.send_message(
-                "❌ You cannot rob yourself.",
-                ephemeral=True
-            )
-
         guild_id = interaction.guild.id
 
         robber = self.get_user(guild_id, interaction.user.id, interaction.user.name)
         victim = self.get_user(guild_id, user.id, user.name)
 
-        robber_balance = robber.get("balance", 0)
         victim_balance = victim.get("balance", 0)
 
-        # =========================
-        # NO MONEY CHECK
-        # =========================
         if victim_balance <= 0:
             return await interaction.response.send_message(
                 f"❌ {user.mention} has no money to rob.",
@@ -91,8 +94,7 @@ class Rob(commands.Cog):
         # SUCCESS
         # =========================
         if success:
-
-            amount = random.randint(1, victim_balance)
+            amount = random.randint(1, max(1, victim_balance))
 
             self.update_balance(guild_id, user.id, -amount)
             self.update_balance(guild_id, interaction.user.id, amount)
@@ -104,20 +106,16 @@ class Rob(commands.Cog):
         # FAIL
         # =========================
         else:
+            robber_balance = robber.get("balance", 0)
 
-            loss = min(random.randint(1, 1000), robber_balance)
+            loss = random.randint(1, min(1000, max(1, robber_balance)))
 
             self.update_balance(guild_id, interaction.user.id, -loss)
 
             result_text = f"🚓 You got caught and lost **${loss}**!"
             color = discord.Color.red()
 
-        # =========================
-        # REFRESH DATA
-        # =========================
-        updated = self.economy.find_one(
-            {"guild_id": str(guild_id), "user_id": str(interaction.user.id)}
-        ) or {"balance": 0}
+        updated = self.get_user(guild_id, interaction.user.id, interaction.user.name)
 
         embed = discord.Embed(
             title="💥 Robbery Result",
