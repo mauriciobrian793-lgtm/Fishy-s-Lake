@@ -35,7 +35,11 @@ class Crime(commands.Cog):
     @app_commands.command(name="crime", description="Commit a crime for money")
     async def crime(self, interaction: discord.Interaction):
 
-        await interaction.response.defer()
+        if not interaction.guild:
+            return await interaction.response.send_message(
+                "❌ This command only works in servers.",
+                ephemeral=True
+            )
 
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 

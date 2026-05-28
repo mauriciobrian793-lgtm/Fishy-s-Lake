@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import random
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 from utils import check_cooldown
 
 
@@ -13,10 +13,10 @@ class Blackjack(commands.Cog):
         self.economy = bot.economy
 
     # -------------------------
-    # GET OR CREATE USER
+    # GET OR CREATE USER (ASYNC FIX)
     # -------------------------
-    def get_user(self, guild_id, user_id, name):
-        return self.economy.find_one_and_update(
+    async def get_user(self, guild_id, user_id, name):
+        return await self.economy.find_one_and_update(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
             {
                 "$setOnInsert": {
@@ -55,17 +55,12 @@ class Blackjack(commands.Cog):
     )
     async def blackjack(self, interaction: discord.Interaction, bet: int):
 
-        await interaction.response.defer()
-
         if interaction.guild is None:
             return await interaction.response.send_message(
                 "❌ Must be used in a server.",
                 ephemeral=True
             )
 
-        # -------------------------
-        # VALIDATION FIRST
-        # -------------------------
         if bet <= 0:
             return await interaction.response.send_message(
                 "❌ Bet must be higher than 0.",
@@ -87,26 +82,25 @@ class Blackjack(commands.Cog):
                 ephemeral=True
             )
 
+        await interaction.response.defer()
+
         guild_id = interaction.guild.id
         user_id = interaction.user.id
 
-        user = self.get_user(guild_id, user_id, interaction.user.name)
+        user = await self.get_user(guild_id, user_id, interaction.user.name)
 
         if user.get("balance", 0) < bet:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 "❌ Not enough money.",
                 ephemeral=True
             )
 
-        # take bet
-        self.economy.update_one(
+        await self.economy.update_one(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
             {"$inc": {"balance": -bet}}
         )
 
-        # -------------------------
         # GAME
-        # -------------------------
         player = [self.draw_card(), self.draw_card()]
         dealer = [self.draw_card(), self.draw_card()]
 
@@ -119,9 +113,6 @@ class Blackjack(commands.Cog):
         player_total = self.calculate(player)
         dealer_total = self.calculate(dealer)
 
-        # -------------------------
-        # RESULT
-        # -------------------------
         if player_total > 21:
             result = "💀 You busted!"
             win = False
@@ -138,26 +129,21 @@ class Blackjack(commands.Cog):
             result = "💀 Dealer wins!"
             win = False
 
-        # -------------------------
-        # PAYOUT (FIXED LOGIC)
-        # -------------------------
+        # PAYOUT
         if win is True:
-            self.economy.update_one(
+            await self.economy.update_one(
                 {"guild_id": str(guild_id), "user_id": str(user_id)},
                 {"$inc": {"balance": bet * 2}}
             )
 
         elif win == "tie":
-            self.economy.update_one(
+            await self.economy.update_one(
                 {"guild_id": str(guild_id), "user_id": str(user_id)},
                 {"$inc": {"balance": bet}}
             )
 
-        updated = self.get_user(guild_id, user_id, interaction.user.name)
+        updated = await self.get_user(guild_id, user_id, interaction.user.name)
 
-        # -------------------------
-        # EMBED
-        # -------------------------
         color = (
             discord.Color.green() if win is True else
             discord.Color.gold() if win == "tie" else
@@ -170,22 +156,12 @@ class Blackjack(commands.Cog):
             color=color
         )
 
-        embed.add_field(
-            name="Your Hand",
-            value=f"{player} = {player_total}",
-            inline=False
-        )
-
-        embed.add_field(
-            name="Dealer Hand",
-            value=f"{dealer} = {dealer_total}",
-            inline=False
-        )
-
+        embed.add_field(name="Your Hand", value=f"{player} = {player_total}", inline=False)
+        embed.add_field(name="Dealer Hand", value=f"{dealer} = {dealer_total}", inline=False)
         embed.add_field(name="Bet", value=f"${bet}", inline=True)
         embed.add_field(name="Balance", value=f"${updated.get('balance', 0)}", inline=True)
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
 
 async def setup(bot):

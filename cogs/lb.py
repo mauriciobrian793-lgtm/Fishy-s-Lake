@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import math
-from motor.motor_asyncio import AsyncIOMotorClient
+from utils import check_cooldown  # ✅ FIXED (missing import)
 
 
 # =========================
@@ -20,7 +20,6 @@ class LeaderboardView(discord.ui.View):
 
         total_pages = max(1, math.ceil(len(self.users) / self.per_page))
 
-        # clamp page so it never goes out of range
         self.page = max(0, min(self.page, total_pages - 1))
 
         start = self.page * self.per_page
@@ -87,8 +86,6 @@ class Leaderboard(commands.Cog):
     )
     async def leaderboard(self, interaction: discord.Interaction):
 
-        await interaction.response.defer()
-
         if not interaction.guild:
             return await interaction.response.send_message(
                 "❌ This command can only be used in a server.",
@@ -134,8 +131,5 @@ class Leaderboard(commands.Cog):
         )
 
 
-# =========================
-# SETUP
-# =========================
 async def setup(bot):
     await bot.add_cog(Leaderboard(bot))

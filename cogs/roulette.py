@@ -4,7 +4,7 @@ from discord import app_commands
 import random
 import asyncio
 from utils import check_cooldown
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 
 
 RED_NUMBERS = {
@@ -28,13 +28,13 @@ class Roulette(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.economy = bot.economy
+        self.economy = bot.economy  # Motor collection
 
     # =========================
-    # USER SYSTEM
+    # USER SYSTEM (ASYNC FIXED)
     # =========================
-    def get_user(self, guild_id, user_id, name):
-        return self.economy.find_one_and_update(
+    async def get_user(self, guild_id, user_id, name):
+        return await self.economy.find_one_and_update(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
             {
                 "$setOnInsert": {
@@ -48,10 +48,11 @@ class Roulette(commands.Cog):
             return_document=ReturnDocument.AFTER
         )
 
-    def update_balance(self, guild_id, user_id, amount):
-        self.economy.update_one(
+    async def update_balance(self, guild_id, user_id, amount):
+        await self.economy.update_one(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
-            {"$inc": {"balance": amount}}
+            {"$inc": {"balance": amount}},
+            upsert=True
         )
 
     # =========================
@@ -75,8 +76,6 @@ class Roulette(commands.Cog):
         app_commands.Choice(name="3rd 12", value="3rd12"),
     ])
     async def roulette(self, interaction: discord.Interaction, bet: int, choice: app_commands.Choice[str]):
-
-        await interaction.response.defer()
 
         if not interaction.guild:
             return await interaction.response.send_message("Guild only command.", ephemeral=True)
@@ -105,16 +104,16 @@ class Roulette(commands.Cog):
         guild_id = interaction.guild.id
         user_id = interaction.user.id
 
-        user = self.get_user(guild_id, user_id, interaction.user.name)
+        user = await self.get_user(guild_id, user_id, interaction.user.name)
 
-        if user["balance"] < bet:
+        if user.get("balance", 0) < bet:
             return await interaction.response.send_message(
                 "❌ Not enough money.",
                 ephemeral=True
             )
 
         # remove bet
-        self.update_balance(guild_id, user_id, -bet)
+        await self.update_balance(guild_id, user_id, -bet)
 
         spin = discord.Embed(
             title="🎡 Spinning Roulette...",
@@ -164,7 +163,7 @@ class Roulette(commands.Cog):
 
         if win:
             payout = bet * multiplier
-            self.update_balance(guild_id, user_id, payout)
+            await self.update_balance(guild_id, user_id, payout)
 
             result_text = f"🎉 You WON! +${payout - bet}"
             color_embed = discord.Color.green()
@@ -172,7 +171,7 @@ class Roulette(commands.Cog):
             result_text = f"💀 You lost -${bet}"
             color_embed = discord.Color.red()
 
-        updated = self.get_user(guild_id, user_id, interaction.user.name)
+        updated = await self.get_user(guild_id, user_id, interaction.user.name)
 
         result = discord.Embed(
             title="🎡 Roulette Result",

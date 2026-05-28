@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from utils import check_cooldown
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 
 
 class CollectIncome(commands.Cog):
@@ -12,10 +12,10 @@ class CollectIncome(commands.Cog):
         self.economy = bot.economy
 
     # -------------------------
-    # GET OR CREATE USER (FIXED)
+    # GET OR CREATE USER (ASYNC FIX)
     # -------------------------
-    def get_user(self, guild_id, user_id, name):
-        return self.economy.find_one_and_update(
+    async def get_user(self, guild_id, user_id, name):
+        return await self.economy.find_one_and_update(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
             {
                 "$setOnInsert": {
@@ -30,19 +30,12 @@ class CollectIncome(commands.Cog):
         )
 
     # -------------------------
-    # ADD MONEY (FIXED)
+    # ADD MONEY (ASYNC FIX)
     # -------------------------
-    def add_money(self, guild_id, user_id, amount):
-        self.economy.update_one(
+    async def add_money(self, guild_id, user_id, amount):
+        await self.economy.update_one(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
-            {
-                "$inc": {"balance": amount},
-                "$setOnInsert": {
-                    "guild_id": str(guild_id),
-                    "user_id": str(user_id),
-                    "balance": 0
-                }
-            },
+            {"$inc": {"balance": amount}},
             upsert=True
         )
 
@@ -55,9 +48,7 @@ class CollectIncome(commands.Cog):
     )
     async def collect_income(self, interaction: discord.Interaction):
 
-        await interaction.response.defer()
-
-        if interaction.guild is None:
+        if not interaction.guild:
             return await interaction.response.send_message(
                 "❌ This command can only be used in a server.",
                 ephemeral=True
@@ -68,9 +59,6 @@ class CollectIncome(commands.Cog):
 
         settings = self.bot.settings.setdefault(guild_id, {})
 
-        # -------------------------
-        # COOLDOWN
-        # -------------------------
         allowed, remaining = check_cooldown(
             interaction.guild.id,
             interaction.user.id,
@@ -110,10 +98,10 @@ class CollectIncome(commands.Cog):
             )
 
         # -------------------------
-        # GIVE MONEY
+        # GIVE MONEY (ASYNC)
         # -------------------------
-        self.add_money(guild_id, user.id, total)
-        updated = self.get_user(guild_id, user.id, user.name)
+        await self.add_money(guild_id, user.id, total)
+        updated = await self.get_user(guild_id, user.id, user.name)
 
         # -------------------------
         # EMBED

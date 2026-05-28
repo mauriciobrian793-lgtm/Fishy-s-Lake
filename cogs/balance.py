@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 from utils import check_cooldown
 
 
@@ -12,10 +12,10 @@ class Balance(commands.Cog):
         self.economy = bot.economy
 
     # -------------------------
-    # GET OR CREATE USER (FIXED)
+    # GET OR CREATE USER (ASYNC FIX)
     # -------------------------
-    def get_user(self, guild_id, user_id, name):
-        return self.economy.find_one_and_update(
+    async def get_user(self, guild_id, user_id, name):
+        return await self.economy.find_one_and_update(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
             {
                 "$setOnInsert": {
@@ -38,8 +38,6 @@ class Balance(commands.Cog):
     )
     async def balance(self, interaction: discord.Interaction, user: discord.Member = None):
 
-        await interaction.response.defer()
-
         if interaction.guild is None:
             return await interaction.response.send_message(
                 "❌ This command can only be used in servers.",
@@ -48,9 +46,6 @@ class Balance(commands.Cog):
 
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
-        # -------------------------
-        # COOLDOWN
-        # -------------------------
         allowed, remaining = check_cooldown(
             interaction.guild.id,
             interaction.user.id,
@@ -64,13 +59,12 @@ class Balance(commands.Cog):
                 ephemeral=True
             )
 
-        # -------------------------
-        # DEFAULT USER
-        # -------------------------
+        await interaction.response.defer()
+
         if user is None:
             user = interaction.user
 
-        data = self.get_user(
+        data = await self.get_user(
             interaction.guild.id,
             user.id,
             user.name
@@ -78,9 +72,6 @@ class Balance(commands.Cog):
 
         balance = data.get("balance", 0)
 
-        # -------------------------
-        # EMBED
-        # -------------------------
         embed = discord.Embed(
             title="🏦 Balance",
             color=discord.Color.green()
@@ -98,7 +89,7 @@ class Balance(commands.Cog):
             inline=True
         )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
 
 async def setup(bot):

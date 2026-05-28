@@ -2,20 +2,20 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from utils import check_cooldown
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument  # ✅ FIXED IMPORT
 
 
 class Give(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.economy = bot.economy
+        self.economy = bot.economy  # Motor collection
 
     # =========================
-    # USER SYSTEM
+    # USER SYSTEM (ASYNC FIXED)
     # =========================
-    def get_user(self, guild_id, user_id, username):
-        return self.economy.find_one_and_update(
+    async def get_user(self, guild_id, user_id, username):
+        return await self.economy.find_one_and_update(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
             {
                 "$setOnInsert": {
@@ -29,10 +29,11 @@ class Give(commands.Cog):
             return_document=ReturnDocument.AFTER
         )
 
-    def update_balance(self, guild_id, user_id, amount):
-        self.economy.update_one(
+    async def update_balance(self, guild_id, user_id, amount):
+        await self.economy.update_one(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
-            {"$inc": {"balance": amount}}
+            {"$inc": {"balance": amount}},
+            upsert=True
         )
 
     # =========================
@@ -48,8 +49,6 @@ class Give(commands.Cog):
         user: discord.Member,
         amount: int
     ):
-
-        await interaction.response.defer()
 
         if not interaction.guild:
             return await interaction.response.send_message(
@@ -92,8 +91,7 @@ class Give(commands.Cog):
 
         guild_id = interaction.guild.id
 
-        giver = self.get_user(guild_id, interaction.user.id, interaction.user.name)
-        receiver = self.get_user(guild_id, user.id, user.name)
+        giver = await self.get_user(guild_id, interaction.user.id, interaction.user.name)
 
         giver_balance = giver.get("balance", 0)
 
@@ -106,11 +104,14 @@ class Give(commands.Cog):
         # =========================
         # TRANSFER
         # =========================
-        self.update_balance(guild_id, interaction.user.id, -amount)
-        self.update_balance(guild_id, user.id, amount)
+        await self.update_balance(guild_id, interaction.user.id, -amount)
+        await self.update_balance(guild_id, user.id, amount)
 
-        # re-fetch updated giver data (IMPORTANT FIX)
-        updated_giver = self.get_user(guild_id, interaction.user.id, interaction.user.name)
+        updated_giver = await self.get_user(
+            guild_id,
+            interaction.user.id,
+            interaction.user.name
+        )
 
         embed = discord.Embed(
             title="💸 Money Transferred",

@@ -2,18 +2,22 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import random
+import asyncio
 from utils import check_cooldown
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 
 
 class Work(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.economy = bot.economy
+        self.economy = bot.economy  # Motor collection
 
-    def get_user(self, guild_id, user_id, name):
-        return self.economy.find_one_and_update(
+    # -------------------------
+    # GET OR CREATE USER (ASYNC)
+    # -------------------------
+    async def get_user(self, guild_id, user_id, name):
+        return await self.economy.find_one_and_update(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
             {
                 "$setOnInsert": {
@@ -27,22 +31,30 @@ class Work(commands.Cog):
             return_document=ReturnDocument.AFTER
         )
 
-    def update_balance(self, guild_id, user_id, amount):
-        self.economy.update_one(
+    # -------------------------
+    # UPDATE BALANCE (ASYNC SAFE)
+    # -------------------------
+    async def update_balance(self, guild_id, user_id, amount):
+        await self.economy.update_one(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
-            {"$inc": {"balance": amount}}
+            {"$inc": {"balance": amount}},
+            upsert=True
         )
 
+    # -------------------------
+    # COMMAND
+    # -------------------------
     @app_commands.command(
         name="work",
         description="Work to earn money"
     )
     async def work(self, interaction: discord.Interaction):
 
-        await interaction.response.defer()
-
         if not interaction.guild:
-            return await interaction.response.send_message("Guild only command.", ephemeral=True)
+            return await interaction.response.send_message(
+                "Guild only command.",
+                ephemeral=True
+            )
 
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
@@ -72,9 +84,16 @@ class Work(commands.Cog):
 
         result_text = random.choice(jobs)
 
-        self.update_balance(interaction.guild.id, interaction.user.id, earnings)
+        # -------------------------
+        # DB UPDATE (AWAIT FIXED)
+        # -------------------------
+        await self.update_balance(
+            interaction.guild.id,
+            interaction.user.id,
+            earnings
+        )
 
-        updated = self.get_user(
+        updated = await self.get_user(
             interaction.guild.id,
             interaction.user.id,
             interaction.user.name
@@ -87,7 +106,11 @@ class Work(commands.Cog):
         )
 
         embed.add_field(name="💰 Earned", value=f"${earnings}", inline=True)
-        embed.add_field(name="🏦 Balance", value=f"${updated.get('balance', 0)}", inline=True)
+        embed.add_field(
+            name="🏦 Balance",
+            value=f"${updated.get('balance', 0)}",
+            inline=True
+        )
 
         await interaction.response.send_message(embed=embed)
 

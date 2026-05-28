@@ -3,14 +3,14 @@ from discord.ext import commands
 from discord import app_commands
 import random
 from utils import check_cooldown
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument  # ✅ FIXED
 
 
 FISHES = ["🐟 Blue Fish", "🐠 Gold Fish", "🐡 Red Fish", "🦈 Shark", "🐙 Octo Fish"]
 
 
 # =========================
-# FISH GAME VIEW
+# FISH GAME VIEW (ASYNC FIXED)
 # =========================
 class FishRaceView(discord.ui.View):
 
@@ -25,26 +25,13 @@ class FishRaceView(discord.ui.View):
         self.finished = False
 
     # =========================
-    # USER SYSTEM
+    # DB (ASYNC FIXED)
     # =========================
-    def get_user(self):
-        return self.bot.economy.find_one_and_update(
+    async def update_balance(self, amount):
+        await self.bot.economy.update_one(
             {"guild_id": self.guild_id, "user_id": self.user_id},
-            {
-                "$setOnInsert": {
-                    "guild_id": self.guild_id,
-                    "user_id": self.user_id,
-                    "balance": 0
-                }
-            },
-            upsert=True,
-            return_document=ReturnDocument.AFTER
-        )
-
-    def update_balance(self, amount):
-        self.bot.economy.update_one(
-            {"guild_id": self.guild_id, "user_id": self.user_id},
-            {"$inc": {"balance": amount}}
+            {"$inc": {"balance": amount}},
+            upsert=True
         )
 
     # =========================
@@ -57,7 +44,6 @@ class FishRaceView(discord.ui.View):
 
         self.finished = True
 
-        # disable buttons immediately (prevents spam)
         for item in self.children:
             item.disabled = True
 
@@ -65,7 +51,7 @@ class FishRaceView(discord.ui.View):
             payout = self.bet * 4
             profit = payout - self.bet
 
-            self.update_balance(profit)
+            await self.update_balance(profit)
 
             result = f"🎉 You WON! +${profit}"
             color = discord.Color.green()
@@ -118,8 +104,6 @@ class FishRace(commands.Cog):
     @app_commands.command(name="fish_race", description="Bet on a fish race")
     async def fish_race(self, interaction: discord.Interaction, bet: int):
 
-        await interaction.response.defer()
-
         if not interaction.guild:
             return await interaction.response.send_message(
                 "❌ This command can only be used in a server.",
@@ -150,7 +134,7 @@ class FishRace(commands.Cog):
         guild_id = interaction.guild.id
         user_id = interaction.user.id
 
-        user = self.economy.find_one_and_update(
+        user = await self.economy.find_one_and_update(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
             {
                 "$setOnInsert": {
@@ -169,10 +153,10 @@ class FishRace(commands.Cog):
                 ephemeral=True
             )
 
-        # take bet
-        self.economy.update_one(
+        await self.economy.update_one(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
-            {"$inc": {"balance": -bet}}
+            {"$inc": {"balance": -bet}},
+            upsert=True
         )
 
         view = FishRaceView(self.bot, guild_id, user_id, bet)
@@ -180,14 +164,11 @@ class FishRace(commands.Cog):
         embed = discord.Embed(
             title="🐟 Fish Race",
             description="Pick your fish!",
-            color=discord.Color.dark_gray()
+            color=discord.Color.dark_grey()
         )
 
         await interaction.response.send_message(embed=embed, view=view)
 
 
-# =========================
-# SETUP
-# =========================
 async def setup(bot):
     await bot.add_cog(FishRace(bot))

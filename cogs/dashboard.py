@@ -36,7 +36,7 @@ class IncomeRoleModal(discord.ui.Modal):
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
         role_income = settings.setdefault("role_income", {})
 
-        role_income[str(self.role_id)] = amount
+        role_income[self.role_id] = amount
 
         await interaction.response.send_message(
             f"💰 Role income set: <@&{self.role_id}> → ${amount}",
@@ -124,7 +124,7 @@ class CommandView(discord.ui.View):
 class RoleSelect(discord.ui.Select):
 
     def __init__(self, roles):
-        roles = roles[:25]  # hard safety cap
+        roles = roles[:25]
 
         options = [
             discord.SelectOption(label=r.name[:100], value=str(r.id))
@@ -161,8 +161,6 @@ class Dashboard(commands.Cog):
         description="Economy control panel"
     )
     async def dashboard(self, interaction: discord.Interaction):
-
-        await interaction.response.defer()
 
         if not interaction.guild:
             return await interaction.response.send_message(
@@ -210,9 +208,6 @@ class Dashboard(commands.Cog):
             inline=False
         )
 
-        # =========================
-        # MAIN VIEW
-        # =========================
         class MainView(discord.ui.View):
 
             @discord.ui.button(label="Set Admin Role", style=discord.ButtonStyle.secondary)
