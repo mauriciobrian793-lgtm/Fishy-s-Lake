@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import math
-from utils import check_cooldown
+from motor.motor_asyncio import AsyncIOMotorClient
 
 
 # =========================

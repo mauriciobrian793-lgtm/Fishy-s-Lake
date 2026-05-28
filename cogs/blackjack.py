@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import random
-from pymongo import ReturnDocument
+from motor.motor_asyncio import AsyncIOMotorClient
 from utils import check_cooldown
 
 

@@ -4,6 +4,7 @@ from discord import app_commands
 import random
 from utils import check_cooldown
 
+
 class Crime(commands.Cog):
 
     def __init__(self, bot):

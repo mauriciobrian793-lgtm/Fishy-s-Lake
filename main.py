@@ -1,12 +1,25 @@
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-from pymongo import MongoClient
+from motor.motor_asyncio import AsyncIOMotorClient
 import os
 
+# -------------------------
+# LOAD ENV
+# -------------------------
 load_dotenv()
-TOKEN = os.getenv("TOKEN")
 
+TOKEN = os.getenv("TOKEN")
+MONGO_URL = os.getenv("MONGO_URL")
+
+if not TOKEN:
+    raise RuntimeError("TOKEN not found in .env")
+if not MONGO_URL:
+    raise RuntimeError("MONGO_URL not found in .env")
+
+# -------------------------
+# BOT SETUP
+# -------------------------
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -16,14 +29,14 @@ bot = commands.Bot(command_prefix="-", intents=intents)
 bot.settings = {}
 
 # -------------------------
-# MONGO (MUST BE FIRST)
+# MONGO (ASYNC - FIXED)
 # -------------------------
-client = MongoClient("mongodb+srv://mauriciobrian793_db_user:<db_password>@fishyeconomybotcluster.ijsludq.mongodb.net/")
+client = AsyncIOMotorClient(MONGO_URL)
 db = client["economy_db"]
 bot.economy = db["economy"]
 
 # -------------------------
-# READY EVENT (IMPORTANT DEBUG)
+# READY EVENT
 # -------------------------
 @bot.event
 async def on_ready():
@@ -58,6 +71,6 @@ async def setup_hook():
         print("Sync error:", e)
 
 # -------------------------
-# RUN
+# RUN BOT
 # -------------------------
 bot.run(TOKEN)
