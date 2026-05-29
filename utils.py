@@ -11,17 +11,18 @@ def check_cooldown(guild_id, user_id, command, settings):
 
     last_used = COOLDOWNS.get(key)
 
-    if last_used is not None:
-        remaining = cooldown - (now - last_used)
+    if last_used:
+        elapsed = now - last_used
+        remaining = cooldown - elapsed
 
         if remaining > 0:
             return False, int(remaining)
 
     COOLDOWNS[key] = now
 
-    # optional cleanup (prevents memory growth)
+    # safer cleanup (prevents lag spikes)
     if len(COOLDOWNS) > 5000:
-        for k in list(COOLDOWNS.keys())[:1000]:
-            del COOLDOWNS[k]
+        for k in list(COOLDOWNS)[:1000]:
+            COOLDOWNS.pop(k, None)
 
     return True, 0

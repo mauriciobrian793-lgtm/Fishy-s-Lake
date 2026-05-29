@@ -1,14 +1,17 @@
-from pymongo import MongoClient
+from motor.motor_asyncio import AsyncIOMotorClient
 
 MONGO_URL = "mongodb+srv://mauriciobrian793_db_user:<db_password>@fishyeconomybotcluster.ijsludq.mongodb.net/?appName=Fishyeconomybotcluster"
 
-client = MongoClient(MONGO_URL)
+client = AsyncIOMotorClient(MONGO_URL)
 
 db = client["fishy_bot"]
 economy = db["economy"]
 
-def get_user(guild_id, user_id):
-    data = economy.find_one({
+# -------------------------
+# GET USER
+# -------------------------
+async def get_user(guild_id, user_id):
+    data = await economy.find_one({
         "guild_id": str(guild_id),
         "user_id": str(user_id)
     })
@@ -19,20 +22,26 @@ def get_user(guild_id, user_id):
             "user_id": str(user_id),
             "balance": 0
         }
-        economy.insert_one(data)
+        await economy.insert_one(data)
 
     return data
 
-
-def add_money(guild_id, user_id, amount):
-    economy.update_one(
+# -------------------------
+# ADD MONEY
+# -------------------------
+async def add_money(guild_id, user_id, amount):
+    await economy.update_one(
         {"guild_id": str(guild_id), "user_id": str(user_id)},
-        {"$inc": {"balance": amount}}
+        {"$inc": {"balance": amount}},
+        upsert=True
     )
 
-
-def remove_money(guild_id, user_id, amount):
-    economy.update_one(
+# -------------------------
+# REMOVE MONEY
+# -------------------------
+async def remove_money(guild_id, user_id, amount):
+    await economy.update_one(
         {"guild_id": str(guild_id), "user_id": str(user_id)},
-        {"$inc": {"balance": -amount}}
+        {"$inc": {"balance": -amount}},
+        upsert=True
     )

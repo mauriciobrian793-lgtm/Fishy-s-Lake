@@ -3,6 +3,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+
 # -------------------------
 # LOAD ENV
 # -------------------------
@@ -25,7 +26,6 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="-", intents=intents)
 
-# shared config
 bot.settings = {}
 
 # -------------------------
@@ -39,6 +39,7 @@ client = AsyncIOMotorClient(
 
 db = client["economy_db"]
 bot.economy = db["economy"]
+
 # -------------------------
 # READY EVENT
 # -------------------------
@@ -69,8 +70,8 @@ async def setup_hook():
     print("Syncing slash commands...")
 
     try:
-        synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} commands")
+        await bot.tree.sync()
+        print("Slash commands synced.")
     except Exception as e:
         print("Sync error:", e)
 

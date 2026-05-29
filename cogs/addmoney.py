@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from pymongo import MongoClient
+from motor.motor_asyncio import ReturnDocument
 
 
 class AddMoney(commands.Cog):
@@ -10,11 +10,8 @@ class AddMoney(commands.Cog):
         self.bot = bot
         self.economy = bot.economy
 
-    # -------------------------
-    # GET OR CREATE USER (FIXED)
-    # -------------------------
-    def get_user(self, guild_id, user_id, name):
-        return self.economy.find_one_and_update(
+    async def get_user(self, guild_id, user_id, name):
+        return await self.economy.find_one_and_update(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
             {
                 "$setOnInsert": {
@@ -28,9 +25,6 @@ class AddMoney(commands.Cog):
             return_document=ReturnDocument.AFTER
         )
 
-    # -------------------------
-    # COMMAND
-    # -------------------------
     @app_commands.command(
         name="addmoney",
         description="Add money to a user"
@@ -42,9 +36,7 @@ class AddMoney(commands.Cog):
         amount: int
     ):
 
-        await interaction.response.defer()
-
-        if interaction.guild is None:
+        if not interaction.guild:
             return await interaction.response.send_message(
                 "❌ This command can only be used in servers.",
                 ephemeral=True
@@ -53,7 +45,7 @@ class AddMoney(commands.Cog):
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
         # -------------------------
-        # ADMIN ROLE CHECK (SAFE)
+        # ADMIN ROLE CHECK
         # -------------------------
         admin_role_id = settings.get("admin_role_id")
 
@@ -64,9 +56,6 @@ class AddMoney(commands.Cog):
                     ephemeral=True
                 )
 
-        # -------------------------
-        # VALIDATION
-        # -------------------------
         if amount <= 0:
             return await interaction.response.send_message(
                 "❌ Amount must be greater than 0.",
@@ -75,10 +64,10 @@ class AddMoney(commands.Cog):
 
         guild_id = interaction.guild.id
 
-        # -------------------------
-        # UPDATE USER
-        # -------------------------
-        self.economy.update_one(
+        await interaction.response.defer()
+
+        # UPDATE MONEY
+        await self.economy.update_one(
             {"guild_id": str(guild_id), "user_id": str(user.id)},
             {
                 "$inc": {"balance": amount},
@@ -87,11 +76,8 @@ class AddMoney(commands.Cog):
             upsert=True
         )
 
-        updated = self.get_user(guild_id, user.id, user.name)
+        updated = await self.get_user(guild_id, user.id, user.name)
 
-        # -------------------------
-        # EMBED
-        # -------------------------
         embed = discord.Embed(
             title="💰 Money Added",
             description=f"Gave money to {user.mention}",
@@ -110,7 +96,7 @@ class AddMoney(commands.Cog):
             inline=True
         )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
 
 async def setup(bot):

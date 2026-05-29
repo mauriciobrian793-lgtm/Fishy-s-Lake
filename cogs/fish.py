@@ -3,15 +3,10 @@ from discord.ext import commands
 from discord import app_commands
 import random
 from utils import check_cooldown
-from motor.motor_asyncio import ReturnDocument  # ✅ FIXED
-
 
 FISHES = ["🐟 Blue Fish", "🐠 Gold Fish", "🐡 Red Fish", "🦈 Shark", "🐙 Octo Fish"]
 
 
-# =========================
-# FISH GAME VIEW (ASYNC FIXED)
-# =========================
 class FishRaceView(discord.ui.View):
 
     def __init__(self, bot, guild_id, user_id, bet):
@@ -24,9 +19,6 @@ class FishRaceView(discord.ui.View):
         self.winner = random.choice(FISHES)
         self.finished = False
 
-    # =========================
-    # DB (ASYNC FIXED)
-    # =========================
     async def update_balance(self, amount):
         await self.bot.economy.update_one(
             {"guild_id": self.guild_id, "user_id": self.user_id},
@@ -34,9 +26,6 @@ class FishRaceView(discord.ui.View):
             upsert=True
         )
 
-    # =========================
-    # RESULT HANDLER
-    # =========================
     async def resolve(self, interaction: discord.Interaction, choice: str):
 
         if self.finished:
@@ -57,6 +46,8 @@ class FishRaceView(discord.ui.View):
             color = discord.Color.green()
 
         else:
+            await self.update_balance(-self.bet)
+
             result = f"💀 You lost! Winner was {self.winner}"
             color = discord.Color.red()
 
@@ -68,9 +59,7 @@ class FishRaceView(discord.ui.View):
 
         await interaction.response.edit_message(embed=embed, view=self)
 
-    # =========================
-    # BUTTONS
-    # =========================
+
     @discord.ui.button(label="Blue Fish", style=discord.ButtonStyle.secondary)
     async def blue(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.resolve(interaction, "🐟 Blue Fish")
@@ -92,9 +81,6 @@ class FishRaceView(discord.ui.View):
         await self.resolve(interaction, "🐙 Octo Fish")
 
 
-# =========================
-# COG
-# =========================
 class FishRace(commands.Cog):
 
     def __init__(self, bot):
@@ -106,7 +92,13 @@ class FishRace(commands.Cog):
 
         if not interaction.guild:
             return await interaction.response.send_message(
-                "❌ This command can only be used in a server.",
+                "❌ Server only command.",
+                ephemeral=True
+            )
+
+        if bet <= 0:
+            return await interaction.response.send_message(
+                "❌ Bet must be higher than 0.",
                 ephemeral=True
             )
 
@@ -125,12 +117,6 @@ class FishRace(commands.Cog):
                 ephemeral=True
             )
 
-        if bet <= 0:
-            return await interaction.response.send_message(
-                "❌ Bet must be higher than 0.",
-                ephemeral=True
-            )
-
         guild_id = interaction.guild.id
         user_id = interaction.user.id
 
@@ -144,7 +130,7 @@ class FishRace(commands.Cog):
                 }
             },
             upsert=True,
-            return_document=ReturnDocument.AFTER
+            return_document=True
         )
 
         if user.get("balance", 0) < bet:
@@ -153,6 +139,7 @@ class FishRace(commands.Cog):
                 ephemeral=True
             )
 
+        # take bet first (IMPORTANT FIX)
         await self.economy.update_one(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
             {"$inc": {"balance": -bet}},

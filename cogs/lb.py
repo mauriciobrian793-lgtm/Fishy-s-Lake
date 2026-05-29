@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import math
-from utils import check_cooldown  # ✅ FIXED (missing import)
+from utils import check_cooldown
 
 
 # =========================
@@ -86,8 +86,10 @@ class Leaderboard(commands.Cog):
     )
     async def leaderboard(self, interaction: discord.Interaction):
 
+        await interaction.response.defer()  # ✅ FIX: prevents timeout
+
         if not interaction.guild:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 "❌ This command can only be used in a server.",
                 ephemeral=True
             )
@@ -102,17 +104,20 @@ class Leaderboard(commands.Cog):
         )
 
         if not allowed:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 f"⏳ Wait {remaining}s before using this command again.",
                 ephemeral=True
             )
 
         guild_id = str(interaction.guild.id)
 
-        users = await self.economy.find({"guild_id": guild_id}).to_list(length=None)
+        # (Motor async query - correct)
+        users = await self.economy.find(
+            {"guild_id": guild_id}
+        ).to_list(length=1000)  # ✅ prevents huge lag
 
         if not users:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 "❌ No data yet in this server.",
                 ephemeral=True
             )
@@ -125,7 +130,7 @@ class Leaderboard(commands.Cog):
 
         view = LeaderboardView(users)
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=view.create_embed(),
             view=view
         )

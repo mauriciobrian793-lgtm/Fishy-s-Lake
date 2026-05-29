@@ -11,9 +11,6 @@ class CollectIncome(commands.Cog):
         self.bot = bot
         self.economy = bot.economy
 
-    # -------------------------
-    # GET OR CREATE USER (ASYNC FIX)
-    # -------------------------
     async def get_user(self, guild_id, user_id, name):
         return await self.economy.find_one_and_update(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
@@ -29,9 +26,6 @@ class CollectIncome(commands.Cog):
             return_document=ReturnDocument.AFTER
         )
 
-    # -------------------------
-    # ADD MONEY (ASYNC FIX)
-    # -------------------------
     async def add_money(self, guild_id, user_id, amount):
         await self.economy.update_one(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
@@ -39,9 +33,6 @@ class CollectIncome(commands.Cog):
             upsert=True
         )
 
-    # -------------------------
-    # COMMAND
-    # -------------------------
     @app_commands.command(
         name="collect_income",
         description="Collect money from your job roles"
@@ -83,7 +74,8 @@ class CollectIncome(commands.Cog):
         total = 0
         breakdown = []
 
-        for role in user.roles:
+        # SAFE ROLE LOOP
+        for role in getattr(user, "roles", []):
             rid = str(role.id)
 
             if rid in role_income:
@@ -97,15 +89,9 @@ class CollectIncome(commands.Cog):
                 ephemeral=True
             )
 
-        # -------------------------
-        # GIVE MONEY (ASYNC)
-        # -------------------------
         await self.add_money(guild_id, user.id, total)
         updated = await self.get_user(guild_id, user.id, user.name)
 
-        # -------------------------
-        # EMBED
-        # -------------------------
         embed = discord.Embed(
             title="💰 Income Collected",
             color=discord.Color.green()

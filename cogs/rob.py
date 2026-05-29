@@ -3,17 +3,17 @@ from discord.ext import commands
 from discord import app_commands
 import random
 from utils import check_cooldown
-from motor.motor_asyncio import ReturnDocument  # IMPORTANT (you were missing this)
+from pymongo import ReturnDocument  # ✅ FIXED (was wrong import before)
 
 
 class Rob(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.economy = bot.economy  # Motor collection
+        self.economy = bot.economy
 
     # =========================
-    # USER SYSTEM (ASYNC FIXED)
+    # USER SYSTEM
     # =========================
     async def get_user(self, guild_id, user_id, name):
         return await self.economy.find_one_and_update(
@@ -43,7 +43,7 @@ class Rob(commands.Cog):
     @app_commands.command(name="rob", description="Rob another user")
     async def rob(self, interaction: discord.Interaction, user: discord.Member):
 
-        await interaction.response.defer()
+        await interaction.response.defer()  # ✅ FIX: prevents timeout
 
         if not interaction.guild:
             return await interaction.followup.send(
@@ -97,7 +97,7 @@ class Rob(commands.Cog):
         # SUCCESS
         # =========================
         if success:
-            amount = random.randint(1, max(1, victim_balance))
+            amount = random.randint(1, victim_balance)
 
             await self.update_balance(guild_id, user.id, -amount)
             await self.update_balance(guild_id, interaction.user.id, amount)

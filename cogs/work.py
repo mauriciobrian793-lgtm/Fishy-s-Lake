@@ -2,9 +2,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import random
-import asyncio
 from utils import check_cooldown
-from motor.motor_asyncio import ReturnDocument
+from pymongo import ReturnDocument  # ✅ FIXED IMPORT
 
 
 class Work(commands.Cog):
@@ -32,7 +31,7 @@ class Work(commands.Cog):
         )
 
     # -------------------------
-    # UPDATE BALANCE (ASYNC SAFE)
+    # UPDATE BALANCE
     # -------------------------
     async def update_balance(self, guild_id, user_id, amount):
         await self.economy.update_one(
@@ -50,8 +49,10 @@ class Work(commands.Cog):
     )
     async def work(self, interaction: discord.Interaction):
 
+        await interaction.response.defer()  # ✅ prevents "did not respond"
+
         if not interaction.guild:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 "Guild only command.",
                 ephemeral=True
             )
@@ -66,7 +67,7 @@ class Work(commands.Cog):
         )
 
         if not allowed:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 f"⏳ Wait {remaining}s before using this command again.",
                 ephemeral=True
             )
@@ -84,9 +85,6 @@ class Work(commands.Cog):
 
         result_text = random.choice(jobs)
 
-        # -------------------------
-        # DB UPDATE (AWAIT FIXED)
-        # -------------------------
         await self.update_balance(
             interaction.guild.id,
             interaction.user.id,
@@ -112,7 +110,7 @@ class Work(commands.Cog):
             inline=True
         )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
 
 async def setup(bot):

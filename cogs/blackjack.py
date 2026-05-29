@@ -12,9 +12,6 @@ class Blackjack(commands.Cog):
         self.bot = bot
         self.economy = bot.economy
 
-    # -------------------------
-    # GET OR CREATE USER (ASYNC FIX)
-    # -------------------------
     async def get_user(self, guild_id, user_id, name):
         return await self.economy.find_one_and_update(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
@@ -30,9 +27,6 @@ class Blackjack(commands.Cog):
             return_document=ReturnDocument.AFTER
         )
 
-    # -------------------------
-    # HELPERS
-    # -------------------------
     def draw_card(self):
         return random.choice([2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11])
 
@@ -46,16 +40,13 @@ class Blackjack(commands.Cog):
 
         return total
 
-    # -------------------------
-    # COMMAND
-    # -------------------------
     @app_commands.command(
         name="blackjack",
         description="Play blackjack against the dealer"
     )
     async def blackjack(self, interaction: discord.Interaction, bet: int):
 
-        if interaction.guild is None:
+        if not interaction.guild:
             return await interaction.response.send_message(
                 "❌ Must be used in a server.",
                 ephemeral=True
@@ -82,22 +73,23 @@ class Blackjack(commands.Cog):
                 ephemeral=True
             )
 
-        await interaction.response.defer()
-
         guild_id = interaction.guild.id
         user_id = interaction.user.id
 
         user = await self.get_user(guild_id, user_id, interaction.user.name)
 
         if user.get("balance", 0) < bet:
-            return await interaction.followup.send(
+            return await interaction.response.send_message(
                 "❌ Not enough money.",
                 ephemeral=True
             )
 
+        await interaction.response.defer()
+
         await self.economy.update_one(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
-            {"$inc": {"balance": -bet}}
+            {"$inc": {"balance": -bet}},
+            upsert=True
         )
 
         # GAME
@@ -133,13 +125,15 @@ class Blackjack(commands.Cog):
         if win is True:
             await self.economy.update_one(
                 {"guild_id": str(guild_id), "user_id": str(user_id)},
-                {"$inc": {"balance": bet * 2}}
+                {"$inc": {"balance": bet * 2}},
+                upsert=True
             )
 
         elif win == "tie":
             await self.economy.update_one(
                 {"guild_id": str(guild_id), "user_id": str(user_id)},
-                {"$inc": {"balance": bet}}
+                {"$inc": {"balance": bet}},
+                upsert=True
             )
 
         updated = await self.get_user(guild_id, user_id, interaction.user.name)
