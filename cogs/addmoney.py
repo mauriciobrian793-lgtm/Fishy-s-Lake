@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from pymongo import ReturnDocument
+from utils import get_settings
 
 
 class AddMoney(commands.Cog):
@@ -42,7 +43,9 @@ class AddMoney(commands.Cog):
                 ephemeral=True
             )
 
-        settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
+          # if you placed it in utils
+
+        settings = await get_settings(self.bot, interaction.guild.id)
 
         # -------------------------
         # ADMIN ROLE CHECK

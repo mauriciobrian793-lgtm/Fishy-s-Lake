@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import random
 from utils import check_cooldown
+from utils import get_settings
 
 FISHES = ["🐟 Blue Fish", "🐠 Gold Fish", "🐡 Red Fish", "🦈 Shark", "🐙 Octo Fish"]
 
@@ -90,6 +91,8 @@ class FishRace(commands.Cog):
     @app_commands.command(name="fish_race", description="Bet on a fish race")
     async def fish_race(self, interaction: discord.Interaction, bet: int):
 
+        settings = await get_settings(self.bot, interaction.guild.id)
+
         if not interaction.guild:
             return await interaction.response.send_message(
                 "❌ Server only command.",
@@ -102,7 +105,7 @@ class FishRace(commands.Cog):
                 ephemeral=True
             )
 
-        settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
+        
 
         allowed, remaining = check_cooldown(
             interaction.guild.id,

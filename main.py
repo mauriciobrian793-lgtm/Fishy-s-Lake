@@ -26,19 +26,25 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="-", intents=intents)
 
-bot.settings = {}
+# -------------------------
+# MEMORY CACHE (TEMP)
+# -------------------------
+bot.settings_cache = {}  # optional cache layer (NOT persistent)
 
 # -------------------------
 # MONGO (ASYNC)
 # -------------------------
 client = AsyncIOMotorClient(
     MONGO_URL,
-    serverSelectionTimeoutMS=5000,
-    connectTimeoutMS=5000
+    serverSelectionTimeoutMS=20000,
+    connectTimeoutMS=20000
 )
 
 db = client["economy_db"]
+
+# collections
 bot.economy = db["economy"]
+bot.settings_db = db["settings"]  # ✅ IMPORTANT FIX (this is what you were missing)
 
 # -------------------------
 # READY EVENT
@@ -70,8 +76,8 @@ async def setup_hook():
     print("Syncing slash commands...")
 
     try:
-        await bot.tree.sync()
-        print("Slash commands synced.")
+        synced = await bot.tree.sync()
+        print(f"Slash commands synced: {len(synced)}")
     except Exception as e:
         print("Sync error:", e)
 

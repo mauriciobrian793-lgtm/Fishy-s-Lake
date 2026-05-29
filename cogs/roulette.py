@@ -4,7 +4,8 @@ from discord import app_commands
 import random
 import asyncio
 from utils import check_cooldown
-from pymongo import ReturnDocument  # ✅ FIXED IMPORT
+from pymongo import ReturnDocument
+from utils import get_settings  # ✅ FIXED IMPORT
 
 
 RED_NUMBERS = {
@@ -82,7 +83,7 @@ class Roulette(commands.Cog):
         if not interaction.guild:
             return await interaction.followup.send("Guild only command.", ephemeral=True)
 
-        settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
+        settings = await get_settings(self.bot, interaction.guild.id)
 
         allowed, remaining = check_cooldown(
             interaction.guild.id,

@@ -9,7 +9,7 @@ from discord import app_commands
 class IncomeRoleModal(discord.ui.Modal):
 
     def __init__(self, role_id, bot):
-        super().__init__(title="Set Role Income")
+        super().__init__(title="💼 Set Role Income")
         self.role_id = str(role_id)
         self.bot = bot
 
@@ -33,13 +33,13 @@ class IncomeRoleModal(discord.ui.Modal):
                 ephemeral=True
             )
 
-        settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
+        settings = await get_settings(self.bot, interaction.guild.id)
         role_income = settings.setdefault("role_income", {})
 
         role_income[self.role_id] = amount
 
         await interaction.response.send_message(
-            f"💰 Role income set: <@&{self.role_id}> → ${amount}",
+            f"💰 Income role set: <@&{self.role_id}> → `${amount}`",
             ephemeral=True
         )
 
@@ -50,7 +50,7 @@ class IncomeRoleModal(discord.ui.Modal):
 class CooldownModal(discord.ui.Modal):
 
     def __init__(self, command, bot):
-        super().__init__(title=f"Cooldown: {command}")
+        super().__init__(title=f"⏱ Cooldown: {command}")
         self.command = command
         self.bot = bot
 
@@ -74,19 +74,19 @@ class CooldownModal(discord.ui.Modal):
                 ephemeral=True
             )
 
-        settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
+        settings = await get_settings(self.bot, interaction.guild.id)
         cooldowns = settings.setdefault("cooldowns", {})
 
         cooldowns[self.command] = seconds
 
         await interaction.response.send_message(
-            f"⏱ `{self.command}` cooldown set to {seconds}s",
+            f"⏱ `{self.command}` cooldown set to `{seconds}s`",
             ephemeral=True
         )
 
 
 # =========================
-# COMMAND SELECT
+# SELECTS
 # =========================
 class CommandSelect(discord.ui.Select):
 
@@ -112,15 +112,6 @@ class CommandSelect(discord.ui.Select):
         )
 
 
-class CommandView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=60)
-        self.add_item(CommandSelect())
-
-
-# =========================
-# ROLE SELECT
-# =========================
 class RoleSelect(discord.ui.Select):
 
     def __init__(self, roles):
@@ -140,6 +131,12 @@ class RoleSelect(discord.ui.Select):
         await interaction.response.send_modal(
             IncomeRoleModal(self.values[0], interaction.client)
         )
+
+
+class CommandView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        self.add_item(CommandSelect())
 
 
 class RoleView(discord.ui.View):
@@ -181,33 +178,36 @@ class Dashboard(commands.Cog):
         cooldowns = settings.get("cooldowns", {})
         role_income = settings.get("role_income", {})
 
+        # =========================
+        # V2 STYLE EMBED (CLEAN UI)
+        # =========================
         embed = discord.Embed(
-            title="⚙️ Economy Dashboard",
-            color=discord.Color.dark_grey()
+            title="⚙️ Economy Dashboard V2",
+            description="Manage your server economy settings below.",
+            color=discord.Color.blurple()
         )
 
         embed.add_field(
-            name="Admin Role",
+            name="🛡 Admin Role",
             value=f"<@&{admin_role}>" if admin_role else "Not set",
             inline=False
         )
 
         embed.add_field(
-            name="Cooldowns",
-            value=str(cooldowns) if cooldowns else "None",
+            name="⏱ Cooldowns",
+            value="\n".join([f"**{k}** → `{v}s`" for k, v in cooldowns.items()]) or "None set",
             inline=False
         )
-
-        income_text = "\n".join(
-            [f"<@&{r}> → ${a}" for r, a in role_income.items()]
-        ) or "None set"
 
         embed.add_field(
             name="💼 Income Roles",
-            value=income_text,
+            value="\n".join([f"<@&{r}> → `${a}`" for r, a in role_income.items()]) or "None set",
             inline=False
         )
 
+        # =========================
+        # MAIN MENU VIEW
+        # =========================
         class MainView(discord.ui.View):
 
             @discord.ui.button(label="Set Admin Role", style=discord.ButtonStyle.secondary)
@@ -215,6 +215,8 @@ class Dashboard(commands.Cog):
 
                 if not interaction2.user.guild_permissions.administrator:
                     return await interaction2.response.send_message("❌ Admin only", ephemeral=True)
+
+                settings["admin_role_id"] = None  # ensures key exists properly
 
                 await interaction2.response.send_message(
                     "Select admin role:",

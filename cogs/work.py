@@ -3,7 +3,8 @@ from discord.ext import commands
 from discord import app_commands
 import random
 from utils import check_cooldown
-from pymongo import ReturnDocument  # ✅ FIXED IMPORT
+from pymongo import ReturnDocument
+from utils import get_settings  # ✅ FIXED IMPORT
 
 
 class Work(commands.Cog):
@@ -57,7 +58,7 @@ class Work(commands.Cog):
                 ephemeral=True
             )
 
-        settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
+        settings = await get_settings(self.bot, interaction.guild.id)
 
         allowed, remaining = check_cooldown(
             interaction.guild.id,

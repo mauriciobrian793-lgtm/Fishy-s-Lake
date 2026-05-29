@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import math
 from utils import check_cooldown
+from utils import get_settings
 
 
 # =========================
@@ -94,7 +95,7 @@ class Leaderboard(commands.Cog):
                 ephemeral=True
             )
 
-        settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
+        settings = await get_settings(self.bot, interaction.guild.id)
 
         allowed, remaining = check_cooldown(
             interaction.guild.id,

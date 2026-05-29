@@ -3,7 +3,8 @@ from discord.ext import commands
 from discord import app_commands
 import random
 from utils import check_cooldown
-from pymongo import ReturnDocument  # ✅ FIXED (was wrong import before)
+from pymongo import ReturnDocument
+from utils import get_settings  # ✅ FIXED (was wrong import before)
 
 
 class Rob(commands.Cog):
@@ -62,8 +63,8 @@ class Rob(commands.Cog):
                 "❌ You cannot rob yourself.",
                 ephemeral=True
             )
-
-        settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
+        settings = await get_settings(self.bot, interaction.guild.id)
+        
 
         allowed, remaining = check_cooldown(
             interaction.guild.id,

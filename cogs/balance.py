@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 from pymongo import ReturnDocument
 from utils import check_cooldown
+from utils import get_settings
 
 
 class Balance(commands.Cog):
@@ -44,7 +45,9 @@ class Balance(commands.Cog):
                 ephemeral=True
             )
 
-        settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
+          # if you placed it in utils
+
+        settings = await get_settings(self.bot, interaction.guild.id)
 
         allowed, remaining = check_cooldown(
             interaction.guild.id,
