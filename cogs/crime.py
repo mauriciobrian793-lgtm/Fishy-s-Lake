@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import random
 from utils import check_cooldown
-from motor.motor_asyncio import ReturnDocument
+from pymongo import ReturnDocument
 
 
 class Crime(commands.Cog):
