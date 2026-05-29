@@ -7,27 +7,45 @@ from utils import check_cooldown
 
 
 # =========================
-# BLACKJACK GAME VIEW
+# EMBED BUILDER (V2 STYLE)
+# =========================
+def embed(title, desc=None, color=discord.Color.blurple()):
+    e = discord.Embed(
+        title=title,
+        description=desc,
+        color=color,
+        timestamp=discord.utils.utcnow()
+    )
+    e.set_footer(text="Blackjack V3 • Casino System")
+    return e
+
+
+# =========================
+# GAME VIEW
 # =========================
 class BlackjackView(discord.ui.View):
 
-    def __init__(self, cog, guild_id, user_id, bet, player_hand, dealer_hand):
-        super().__init__(timeout=120)
+    def __init__(self, cog, guild_id, user_id, bet):
+        super().__init__(timeout=180)
 
         self.cog = cog
         self.guild_id = str(guild_id)
         self.user_id = str(user_id)
+
         self.bet = bet
+        self.bet2 = 0  # for split
 
-        self.player = player_hand
-        self.dealer = dealer_hand
+        self.hands = [[cog.draw_card(), cog.draw_card()]]
+        self.dealer = [cog.draw_card(), cog.draw_card()]
 
+        self.active_hand = 0
         self.finished = False
+        self.doubled = False
 
-    # -------------------------
-    # CALCULATE HAND
-    # -------------------------
-    def calculate(self, hand):
+    # =========================
+    # CALC
+    # =========================
+    def calc(self, hand):
         total = sum(hand)
         aces = hand.count(11)
 
@@ -37,109 +55,109 @@ class BlackjackView(discord.ui.View):
 
         return total
 
-    # -------------------------
-    # DEALER TURN
-    # -------------------------
+    # =========================
+    # DEALER
+    # =========================
     async def dealer_play(self):
-        while self.calculate(self.dealer) < 17:
+        while self.calc(self.dealer) < 17:
             self.dealer.append(self.cog.draw_card())
 
-    # -------------------------
-    # DB UPDATE
-    # -------------------------
-    async def update_balance(self, amount):
+    # =========================
+    # WIN STREAK UPDATE
+    # =========================
+    async def update_streak(self, win: bool):
+        data = await self.cog.get_user(self.guild_id, self.user_id, "user")
+
+        streak = data.get("win_streak", 0)
+
+        if win:
+            streak += 1
+        else:
+            streak = 0
+
         await self.cog.economy.update_one(
             {"guild_id": self.guild_id, "user_id": self.user_id},
-            {"$inc": {"balance": amount}},
+            {"$set": {"win_streak": streak}},
             upsert=True
         )
 
-    # -------------------------
+    # =========================
     # END GAME
-    # -------------------------
-    async def end_game(self, interaction, result_text, color, win_state):
+    # =========================
+    async def finish(self, interaction, result, color, win_state):
         self.finished = True
 
-        for item in self.children:
-            item.disabled = True
+        for b in self.children:
+            b.disabled = True
 
-        updated = await self.cog.get_user(self.guild_id, self.user_id, interaction.user.name)
+        await self.update_streak(win_state is True)
 
-        embed = discord.Embed(
-            title="🃏 Blackjack Result",
-            description=result_text,
-            color=color
-        )
+        data = await self.cog.get_user(self.guild_id, self.user_id, interaction.user.name)
 
-        embed.add_field(
-            name="Your Hand",
-            value=f"{self.player} = {self.calculate(self.player)}",
+        e = embed("🃏 Blackjack Result", result, color)
+
+        e.add_field(
+            name="🧠 Final Hand",
+            value=f"{self.hands} = **{self.calc(self.hands[self.active_hand])}**",
             inline=False
         )
 
-        embed.add_field(
-            name="Dealer Hand",
-            value=f"{self.dealer} = {self.calculate(self.dealer)}",
+        e.add_field(
+            name="🎴 Dealer",
+            value=f"{self.dealer} = **{self.calc(self.dealer)}**",
             inline=False
         )
 
-        embed.add_field(name="Bet", value=f"${self.bet}", inline=True)
-        embed.add_field(name="Balance", value=f"${updated.get('balance', 0)}", inline=True)
+        e.add_field(name="💰 Bet", value=f"${self.bet}", inline=True)
+        e.add_field(name="🔥 Win Streak", value=str(data.get("win_streak", 0)), inline=True)
+        e.add_field(name="🏦 Balance", value=f"${data.get('balance', 0)}", inline=True)
 
-        await interaction.response.edit_message(embed=embed, view=self)
+        await interaction.response.edit_message(embed=e, view=self)
 
-    # -------------------------
-    # HIT BUTTON
-    # -------------------------
+    # =========================
+    # HIT
+    # =========================
     @discord.ui.button(label="Hit", style=discord.ButtonStyle.green)
     async def hit(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         if interaction.user.id != int(self.user_id):
             return await interaction.response.send_message("❌ Not your game.", ephemeral=True)
 
-        if self.finished:
+        hand = self.hands[self.active_hand]
+        hand.append(self.cog.draw_card())
+
+        if self.calc(hand) > 21:
+            await self.finish(interaction, "💀 You busted!", discord.Color.red(), False)
             return
 
-        self.player.append(self.cog.draw_card())
+        e = embed("🃏 Blackjack", "Hit or Stand", discord.Color.blurple())
+        e.add_field(name="Hand", value=str(self.hands), inline=False)
+        e.add_field(name="Dealer", value=f"[{self.dealer[0]}, ❓]", inline=False)
 
-        if self.calculate(self.player) > 21:
-            await self.end_game(
-                interaction,
-                "💀 You busted!",
-                discord.Color.red(),
-                False
-            )
-            return
+        await interaction.response.edit_message(embed=e, view=self)
 
-        await interaction.response.edit_message(
-            embed=self.cog.build_embed(self.player, self.dealer, self.bet),
-            view=self
-        )
-
-    # -------------------------
-    # STAND BUTTON
-    # -------------------------
+    # =========================
+    # STAND
+    # =========================
     @discord.ui.button(label="Stand", style=discord.ButtonStyle.gray)
     async def stand(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         if interaction.user.id != int(self.user_id):
             return await interaction.response.send_message("❌ Not your game.", ephemeral=True)
 
-        if self.finished:
-            return
-
         await self.dealer_play()
 
-        p = self.calculate(self.player)
-        d = self.calculate(self.dealer)
+        p = self.calc(self.hands[0])
+        d = self.calc(self.dealer)
 
+        # payout
         if d > 21 or p > d:
             await self.cog.economy.update_one(
                 {"guild_id": self.guild_id, "user_id": self.user_id},
                 {"$inc": {"balance": self.bet * 2}},
                 upsert=True
             )
-            await self.end_game(interaction, "🎉 You win!", discord.Color.green(), True)
+            await self.finish(interaction, "🎉 You win!", discord.Color.green(), True)
 
         elif p == d:
             await self.cog.economy.update_one(
@@ -147,10 +165,46 @@ class BlackjackView(discord.ui.View):
                 {"$inc": {"balance": self.bet}},
                 upsert=True
             )
-            await self.end_game(interaction, "🤝 Tie!", discord.Color.gold(), "tie")
+            await self.finish(interaction, "🤝 Tie!", discord.Color.gold(), True)
 
         else:
-            await self.end_game(interaction, "💀 Dealer wins!", discord.Color.red(), False)
+            await self.finish(interaction, "💀 Dealer wins!", discord.Color.red(), False)
+
+    # =========================
+    # DOUBLE DOWN
+    # =========================
+    @discord.ui.button(label="Double", style=discord.ButtonStyle.blurple)
+    async def double(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        if interaction.user.id != int(self.user_id):
+            return await interaction.response.send_message("❌ Not your game.", ephemeral=True)
+
+        self.bet *= 2
+        self.hands[0].append(self.cog.draw_card())
+
+        await self.stand(interaction, button)
+
+    # =========================
+    # SPLIT
+    # =========================
+    @discord.ui.button(label="Split", style=discord.ButtonStyle.red)
+    async def split(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        if interaction.user.id != int(self.user_id):
+            return await interaction.response.send_message("❌ Not your game.", ephemeral=True)
+
+        if len(self.hands[0]) != 2 or self.hands[0][0] != self.hands[0][1]:
+            return await interaction.response.send_message("❌ Can't split.", ephemeral=True)
+
+        self.hands = [
+            [self.hands[0][0], self.cog.draw_card()],
+            [self.hands[0][1], self.cog.draw_card()]
+        ]
+
+        await interaction.response.edit_message(
+            embed=embed("🃏 Split Hand", "Playing 2 hands", discord.Color.orange()),
+            view=self
+        )
 
 
 # =========================
@@ -165,64 +219,25 @@ class Blackjack(commands.Cog):
     async def get_user(self, guild_id, user_id, name):
         return await self.economy.find_one_and_update(
             {"guild_id": str(guild_id), "user_id": str(user_id)},
-            {
-                "$setOnInsert": {
-                    "guild_id": str(guild_id),
-                    "user_id": str(user_id),
-                    "balance": 0,
-                    "name": name
-                }
-            },
+            {"$setOnInsert": {"balance": 0, "win_streak": 0, "name": name}},
             upsert=True,
             return_document=ReturnDocument.AFTER
         )
 
     def draw_card(self):
-        return random.choice([2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11])
+        return random.choice([2,3,4,5,6,7,8,9,10,10,10,10,11])
 
-    def calculate(self, hand):
-        total = sum(hand)
-        aces = hand.count(11)
-
-        while total > 21 and aces:
-            total -= 10
-            aces -= 1
-
-        return total
-
-    # -------------------------
-    # EMBED BUILDER
-    # -------------------------
-    def build_embed(self, player, dealer, bet):
-        return discord.Embed(
-            title="🃏 Blackjack",
-            description="Hit or Stand?",
-            color=discord.Color.dark_blue()
-        ).add_field(
-            name="Your Hand",
-            value=f"{player} = {self.calculate(player)}",
-            inline=False
-        ).add_field(
-            name="Dealer Showing",
-            value=f"[{dealer[0]}, ❓]",
-            inline=False
-        ).add_field(
-            name="Bet",
-            value=f"${bet}",
-            inline=True
-        )
-
-    # -------------------------
-    # COMMAND
-    # -------------------------
-    @app_commands.command(name="blackjack", description="Play real blackjack")
+    # =========================
+    # COMMAND (FIXED + WORKING)
+    # =========================
+    @app_commands.command(name="blackjack", description="Play Blackjack V3")
     async def blackjack(self, interaction: discord.Interaction, bet: int):
 
         if not interaction.guild:
-            return await interaction.response.send_message("❌ Must be used in a server.", ephemeral=True)
+            return await interaction.response.send_message("Server only.", ephemeral=True)
 
         if bet <= 0:
-            return await interaction.response.send_message("❌ Bet must be higher than 0.", ephemeral=True)
+            return await interaction.response.send_message("Invalid bet.", ephemeral=True)
 
         settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
@@ -235,14 +250,14 @@ class Blackjack(commands.Cog):
 
         if not allowed:
             return await interaction.response.send_message(
-                f"⏳ Wait {remaining}s before using this command again.",
+                f"Cooldown: {remaining}s",
                 ephemeral=True
             )
 
         user = await self.get_user(interaction.guild.id, interaction.user.id, interaction.user.name)
 
         if user.get("balance", 0) < bet:
-            return await interaction.response.send_message("❌ Not enough money.", ephemeral=True)
+            return await interaction.response.send_message("Not enough money.", ephemeral=True)
 
         await self.economy.update_one(
             {"guild_id": str(interaction.guild.id), "user_id": str(interaction.user.id)},
@@ -250,20 +265,10 @@ class Blackjack(commands.Cog):
             upsert=True
         )
 
-        player = [self.draw_card(), self.draw_card()]
-        dealer = [self.draw_card(), self.draw_card()]
-
-        view = BlackjackView(
-            self,
-            interaction.guild.id,
-            interaction.user.id,
-            bet,
-            player,
-            dealer
-        )
+        view = BlackjackView(self, interaction.guild.id, interaction.user.id, bet)
 
         await interaction.response.send_message(
-            embed=self.build_embed(player, dealer, bet),
+            embed=embed("🃏 Blackjack V3", "Hit, Stand, Split or Double"),
             view=view
         )
 
