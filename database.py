@@ -1,6 +1,6 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 
-MONGO_URL = "mongodb+srv://mauriciobrian793_db_user:<db_password>@fishyeconomybotcluster.ijsludq.mongodb.net/?appName=Fishyeconomybotcluster"
+MONGO_URL = "mongodb+srv://mauriciobrian793_db_user:<Uspkajyvgc>@fishyeconomybotcluster.ijsludq.mongodb.net/?appName=Fishyeconomybotcluster"
 
 client = AsyncIOMotorClient(MONGO_URL)
 
