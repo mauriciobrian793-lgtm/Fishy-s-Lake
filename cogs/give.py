@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from utils import check_cooldown
-from pymongo import ReturnDocument  # ✅ FIXED IMPORT
+from motor.motor_asyncio import ReturnDocument  # ✅ FIXED IMPORT
 
 
 class Give(commands.Cog):

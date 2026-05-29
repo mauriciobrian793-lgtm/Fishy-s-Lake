@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import random
 from utils import check_cooldown
-from pymongo import ReturnDocument  # ✅ FIXED
+from motor.motor_asyncio import ReturnDocument  # ✅ FIXED
 
 
 FISHES = ["🐟 Blue Fish", "🐠 Gold Fish", "🐡 Red Fish", "🦈 Shark", "🐙 Octo Fish"]

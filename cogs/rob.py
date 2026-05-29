@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import random
 from utils import check_cooldown
-from pymongo import ReturnDocument  # IMPORTANT (you were missing this)
+from motor.motor_asyncio import ReturnDocument  # IMPORTANT (you were missing this)
 
 
 class Rob(commands.Cog):

@@ -3,7 +3,6 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
-
 # -------------------------
 # LOAD ENV
 # -------------------------
@@ -34,13 +33,12 @@ bot.settings = {}
 # -------------------------
 client = AsyncIOMotorClient(
     MONGO_URL,
-    serverSelectionTimeoutMS=5000,  # prevents long freezing
+    serverSelectionTimeoutMS=5000,
     connectTimeoutMS=5000
 )
 
 db = client["economy_db"]
 bot.economy = db["economy"]
-
 # -------------------------
 # READY EVENT
 # -------------------------

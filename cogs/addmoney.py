@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import MongoClient
 
 
 class AddMoney(commands.Cog):

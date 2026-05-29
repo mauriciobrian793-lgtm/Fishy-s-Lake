@@ -4,7 +4,7 @@ from discord import app_commands
 import random
 import asyncio
 from utils import check_cooldown
-from pymongo import ReturnDocument
+from motor.motor_asyncio import ReturnDocument
 
 
 RED_NUMBERS = {
