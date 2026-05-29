@@ -2,13 +2,15 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import random
+from pymongo import ReturnDocument
 from utils import check_cooldown, get_settings
 
 
 # =========================
-# CARDS (REAL DISPLAY)
+# CARD SYSTEM (REAL UNICODE)
 # =========================
 SUITS = ["♠", "♥", "♦", "♣"]
+
 VALUES = [
     ("A", 11),
     ("2", 2),
@@ -25,11 +27,28 @@ VALUES = [
     ("K", 10),
 ]
 
+UNICODE = {
+    "A♠":"🂡","A♥":"🂱","A♦":"🃁","A♣":"🃑",
+    "2♠":"🂢","2♥":"🂲","2♦":"🃂","2♣":"🃒",
+    "3♠":"🂣","3♥":"🂳","3♦":"🃃","3♣":"🃓",
+    "4♠":"🂤","4♥":"🂴","4♦":"🃄","4♣":"🃔",
+    "5♠":"🂥","5♥":"🂵","5♦":"🃅","5♣":"🃕",
+    "6♠":"🂦","6♥":"🂶","6♦":"🃆","6♣":"🃖",
+    "7♠":"🂧","7♥":"🂷","7♦":"🃇","7♣":"🃗",
+    "8♠":"🂨","8♥":"🂸","8♦":"🃈","8♣":"🃘",
+    "9♠":"🂩","9♥":"🂹","9♦":"🃉","9♣":"🃙",
+    "10♠":"🂪","10♥":"🂺","10♦":"🃊","10♣":"🃚",
+    "J♠":"🂫","J♥":"🂻","J♦":"🃋","J♣":"🃛",
+    "Q♠":"🂭","Q♥":"🂽","Q♦":"🃍","Q♣":"🃝",
+    "K♠":"🂮","K♥":"🂾","K♦":"🃎","K♣":"🃞",
+    "BACK":"🂠"
+}
+
 
 def draw_card():
     v, val = random.choice(VALUES)
-    suit = random.choice(SUITS)
-    return {"name": f"{v}{suit}", "value": val}
+    s = random.choice(SUITS)
+    return {"raw": f"{v}{s}", "value": val}
 
 
 def hand_value(hand):
@@ -43,25 +62,28 @@ def hand_value(hand):
     return total
 
 
-def format_hand(hand, hide_first=False):
-    if hide_first:
-        return "🂠, " + ", ".join(c["name"] for c in hand[1:])
-    return ", ".join(c["name"] for c in hand)
+def render(hand, hide_first=False):
+    out = []
+    for i, c in enumerate(hand):
+        if hide_first and i == 0:
+            out.append(UNICODE["BACK"])
+        else:
+            out.append(UNICODE.get(c["raw"], "🂠"))
+    return " ".join(out)
 
 
-def make_embed(title, desc, color):
+def embed(title, desc=None, color=discord.Color.blurple()):
     e = discord.Embed(
         title=title,
         description=desc,
-        color=color,
-        timestamp=discord.utils.utcnow()
+        color=color
     )
-    e.set_footer(text="Casino Blackjack")
+    e.set_footer(text="Blackjack • Casino System")
     return e
 
 
 # =========================
-# VIEW (GAME)
+# GAME VIEW
 # =========================
 class BlackjackView(discord.ui.View):
 
@@ -79,108 +101,89 @@ class BlackjackView(discord.ui.View):
 
         self.finished = False
 
-    # -------------------------
-    def dealer_play(self):
+    # =========================
+    # DEALER AI (REAL RULES)
+    # =========================
+    async def dealer_play(self):
         while hand_value(self.dealer) < 17:
             self.dealer.append(draw_card())
 
-    def end(self, interaction, result, color, payout=0):
+    # =========================
+    # END GAME
+    # =========================
+    async def end(self, interaction, text, color, win_state):
         self.finished = True
+        for item in self.children:
+            item.disabled = True
 
-        for b in self.children:
-            b.disabled = True
-
-        if payout != 0:
-            self.cog.economy.update_one(
+        # payout
+        if win_state is True:
+            await self.cog.economy.update_one(
                 {"guild_id": self.guild_id, "user_id": self.user_id},
-                {"$inc": {"balance": payout}},
+                {"$inc": {"balance": self.bet * 2}},
+                upsert=True
+            )
+        elif win_state == "tie":
+            await self.cog.economy.update_one(
+                {"guild_id": self.guild_id, "user_id": self.user_id},
+                {"$inc": {"balance": self.bet}},
                 upsert=True
             )
 
-        embed = make_embed("🃏 Blackjack Result", result, color)
+        user = await self.cog.get_user(self.guild_id, self.user_id, interaction.user.name)
 
-        embed.add_field(
-            name="Your Hand",
-            value=f"{format_hand(self.player)} ({hand_value(self.player)})",
-            inline=False
-        )
+        e = embed("🃏 Blackjack", text, color)
 
-        embed.add_field(
-            name="Dealer Hand",
-            value=f"{format_hand(self.dealer)} ({hand_value(self.dealer)})",
-            inline=False
-        )
+        e.add_field(name="Your Hand", value=f"{render(self.player)}\n**{hand_value(self.player)}**", inline=False)
+        e.add_field(name="Dealer Hand", value=f"{render(self.dealer)}\n**{hand_value(self.dealer)}**", inline=False)
+        e.add_field(name="Bet", value=f"${self.bet}", inline=True)
+        e.add_field(name="Balance", value=f"${user.get('balance',0)}", inline=True)
 
-        self.cog.get_user(self.guild_id, self.user_id, "user")
+        await interaction.response.edit_message(embed=e, view=self)
 
-        interaction.response.edit_message(embed=embed, view=self)
-
-    # -------------------------
-    @discord.ui.button(label="Hit", style=discord.ButtonStyle.secondary)
+    # =========================
+    # HIT
+    # =========================
+    @discord.ui.button(label="Hit", style=discord.ButtonStyle.gray)
     async def hit(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         if interaction.user.id != int(self.user_id):
-            return await interaction.response.send_message("Not your game.", ephemeral=True)
+            return await interaction.response.send_message("❌ Not your game.", ephemeral=True)
 
         self.player.append(draw_card())
 
         if hand_value(self.player) > 21:
-            return self.end(interaction, "💀 Bust!", discord.Color.red(), 0)
+            await self.end(interaction, "💀 You busted!", discord.Color.red(), False)
+            return
 
-        embed = make_embed(
-            "🃏 Blackjack",
-            "Hit or Stand",
-            discord.Color.dark_gray()
-        )
+        e = embed("🃏 Blackjack", "Hit or Stand")
+        e.add_field(name="Your Hand", value=render(self.player), inline=False)
+        e.add_field(name="Dealer", value=render(self.dealer, hide_first=True), inline=False)
 
-        embed.add_field(
-            name="Your Hand",
-            value=f"{format_hand(self.player)} ({hand_value(self.player)})",
-            inline=False
-        )
+        await interaction.response.edit_message(embed=e, view=self)
 
-        embed.add_field(
-            name="Dealer",
-            value=f"{self.dealer[0]['name']}, 🂠",
-            inline=False
-        )
-
-        await interaction.response.edit_message(embed=embed, view=self)
-
-    # -------------------------
-    @discord.ui.button(label="Stand", style=discord.ButtonStyle.secondary)
+    # =========================
+    # STAND
+    # =========================
+    @discord.ui.button(label="Stand", style=discord.ButtonStyle.gray)
     async def stand(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         if interaction.user.id != int(self.user_id):
-            return await interaction.response.send_message("Not your game.", ephemeral=True)
+            return await interaction.response.send_message("❌ Not your game.", ephemeral=True)
 
-        self.dealer_play()
+        await self.dealer_play()
 
         p = hand_value(self.player)
         d = hand_value(self.dealer)
 
         if d > 21 or p > d:
-            return self.end(interaction, "🎉 You win!", discord.Color.green(), self.bet * 2)
+            await self.end(interaction, "🎉 You win!", discord.Color.green(), True)
 
-        if p == d:
-            return self.end(interaction, "🤝 Push!", discord.Color.gold(), self.bet)
+        elif p == d:
+            await self.end(interaction, "🤝 Tie!", discord.Color.gold(), "tie")
 
-        return self.end(interaction, "💀 Dealer wins!", discord.Color.red(), 0)
-
-    # -------------------------
-    @discord.ui.button(label="Double", style=discord.ButtonStyle.secondary)
-    async def double(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        if interaction.user.id != int(self.user_id):
-            return await interaction.response.send_message("Not your game.", ephemeral=True)
-
-        self.bet *= 2
-        self.player.append(draw_card())
-
-        if hand_value(self.player) > 21:
-            return self.end(interaction, "💀 Bust!", discord.Color.red(), 0)
-
-        self.stand.callback(self, interaction)
+        else:
+            await self.end(interaction, "💀 Dealer wins!", discord.Color.red(), False)
 
 
 # =========================
@@ -197,9 +200,12 @@ class Blackjack(commands.Cog):
             {"guild_id": str(guild_id), "user_id": str(user_id)},
             {"$setOnInsert": {"balance": 0, "name": name}},
             upsert=True,
-            return_document=True
+            return_document=ReturnDocument.AFTER
         )
 
+    # =========================
+    # COMMAND
+    # =========================
     @app_commands.command(name="blackjack", description="Play Blackjack")
     async def blackjack(self, interaction: discord.Interaction, bet: int):
 
@@ -216,7 +222,7 @@ class Blackjack(commands.Cog):
         )
 
         if not allowed:
-            return await interaction.response.send_message(f"Cooldown {remaining}s", ephemeral=True)
+            return await interaction.response.send_message(f"Cooldown: {remaining}s", ephemeral=True)
 
         user = await self.get_user(interaction.guild.id, interaction.user.id, interaction.user.name)
 
@@ -231,25 +237,11 @@ class Blackjack(commands.Cog):
 
         view = BlackjackView(self, interaction.guild.id, interaction.user.id, bet)
 
-        embed = make_embed(
-            "🃏 Blackjack",
-            "Hit or Stand",
-            discord.Color.dark_gray()
-        )
+        e = embed("🃏 Blackjack", "Hit or Stand")
+        e.add_field(name="Your Hand", value=render(view.player), inline=False)
+        e.add_field(name="Dealer", value=render(view.dealer, hide_first=True), inline=False)
 
-        embed.add_field(
-            name="Your Hand",
-            value=f"{format_hand(view.player)} ({hand_value(view.player)})",
-            inline=False
-        )
-
-        embed.add_field(
-            name="Dealer",
-            value=f"{view.dealer[0]['name']}, 🂠",
-            inline=False
-        )
-
-        await interaction.response.send_message(embed=embed, view=view)
+        await interaction.response.send_message(embed=e, view=view)
 
 
 async def setup(bot):
