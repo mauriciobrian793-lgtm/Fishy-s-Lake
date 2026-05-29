@@ -3,28 +3,19 @@ from discord.ext import commands
 from discord import app_commands
 import random
 from pymongo import ReturnDocument
-from utils import check_cooldown, get_settings
+from utils import check_cooldown
 
 
 # =========================
-# CARD SYSTEM (REAL UNICODE)
+# CARDS (REAL UNICODE DECK)
 # =========================
 SUITS = ["♠", "♥", "♦", "♣"]
 
 VALUES = [
     ("A", 11),
-    ("2", 2),
-    ("3", 3),
-    ("4", 4),
-    ("5", 5),
-    ("6", 6),
-    ("7", 7),
-    ("8", 8),
-    ("9", 9),
-    ("10", 10),
-    ("J", 10),
-    ("Q", 10),
-    ("K", 10),
+    ("2", 2), ("3", 3), ("4", 4), ("5", 5),
+    ("6", 6), ("7", 7), ("8", 8), ("9", 9),
+    ("10", 10), ("J", 10), ("Q", 10), ("K", 10)
 ]
 
 UNICODE = {
@@ -73,11 +64,7 @@ def render(hand, hide_first=False):
 
 
 def embed(title, desc=None, color=discord.Color.blurple()):
-    e = discord.Embed(
-        title=title,
-        description=desc,
-        color=color
-    )
+    e = discord.Embed(title=title, description=desc, color=color)
     e.set_footer(text="Blackjack • Casino System")
     return e
 
@@ -93,7 +80,6 @@ class BlackjackView(discord.ui.View):
         self.cog = cog
         self.guild_id = str(guild_id)
         self.user_id = str(user_id)
-
         self.bet = bet
 
         self.player = [draw_card(), draw_card()]
@@ -101,18 +87,13 @@ class BlackjackView(discord.ui.View):
 
         self.finished = False
 
-    # =========================
-    # DEALER AI (REAL RULES)
-    # =========================
     async def dealer_play(self):
         while hand_value(self.dealer) < 17:
             self.dealer.append(draw_card())
 
-    # =========================
-    # END GAME
-    # =========================
     async def end(self, interaction, text, color, win_state):
         self.finished = True
+
         for item in self.children:
             item.disabled = True
 
@@ -144,7 +125,7 @@ class BlackjackView(discord.ui.View):
     # =========================
     # HIT
     # =========================
-    @discord.ui.button(label="Hit", style=discord.ButtonStyle.gray)
+    @discord.ui.button(label="Hit", style=discord.ButtonStyle.secondary)
     async def hit(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         if interaction.user.id != int(self.user_id):
@@ -165,7 +146,7 @@ class BlackjackView(discord.ui.View):
     # =========================
     # STAND
     # =========================
-    @discord.ui.button(label="Stand", style=discord.ButtonStyle.gray)
+    @discord.ui.button(label="Stand", style=discord.ButtonStyle.secondary)
     async def stand(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         if interaction.user.id != int(self.user_id):
@@ -203,16 +184,16 @@ class Blackjack(commands.Cog):
             return_document=ReturnDocument.AFTER
         )
 
-    # =========================
-    # COMMAND
-    # =========================
     @app_commands.command(name="blackjack", description="Play Blackjack")
     async def blackjack(self, interaction: discord.Interaction, bet: int):
+
+        if not interaction.guild:
+            return await interaction.response.send_message("Server only.", ephemeral=True)
 
         if bet <= 0:
             return await interaction.response.send_message("Invalid bet.", ephemeral=True)
 
-        settings = await get_settings(self.bot, interaction.guild.id)
+        settings = self.bot.settings.setdefault(str(interaction.guild.id), {})
 
         allowed, remaining = check_cooldown(
             interaction.guild.id,
@@ -222,7 +203,10 @@ class Blackjack(commands.Cog):
         )
 
         if not allowed:
-            return await interaction.response.send_message(f"Cooldown: {remaining}s", ephemeral=True)
+            return await interaction.response.send_message(
+                f"Cooldown: {remaining}s",
+                ephemeral=True
+            )
 
         user = await self.get_user(interaction.guild.id, interaction.user.id, interaction.user.name)
 
