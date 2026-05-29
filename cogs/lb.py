@@ -109,7 +109,7 @@ class Leaderboard(commands.Cog):
 
         guild_id = str(interaction.guild.id)
 
-        users = list(self.economy.find({"guild_id": guild_id}))
+        users = await self.economy.find({"guild_id": guild_id}).to_list(length=None)
 
         if not users:
             return await interaction.response.send_message(
