@@ -84,7 +84,7 @@ class CooldownModal(discord.ui.Modal):
 
 
 # =========================
-# 🛒 SHOP MODAL (ADDED FIX)
+# SHOP MODAL
 # =========================
 class ShopItemModal(discord.ui.Modal, title="🛒 Add Shop Item"):
 
@@ -92,9 +92,9 @@ class ShopItemModal(discord.ui.Modal, title="🛒 Add Shop Item"):
         super().__init__()
         self.bot = bot
 
-        self.item_name = discord.ui.TextInput(label="Item Name")
-        self.price = discord.ui.TextInput(label="Price")
-        self.role_id = discord.ui.TextInput(label="Role ID (optional)", required=False)
+        self.item_name = TextInput(label="Item Name")
+        self.price = TextInput(label="Price")
+        self.role_id = TextInput(label="Role ID (optional)", required=False)
 
         self.add_item(self.item_name)
         self.add_item(self.price)
@@ -267,9 +267,6 @@ class IncomeRoleView(discord.ui.View):
         self.add_item(IncomeRoleSelect(roles))
 
 
-# =========================
-# SHOP VIEW BUTTON
-# =========================
 class ShopItemView(discord.ui.View):
 
     def __init__(self):
@@ -319,6 +316,25 @@ class Dashboard(commands.Cog):
         embed.add_field(
             name="💼 Income Roles",
             value="\n".join([f"<@&{k}> → ${v}" for k, v in settings.get("role_income", {}).items()]) or "None",
+            inline=False
+        )
+
+        # =========================
+        # 🛒 SHOP DISPLAY (ADDED)
+        # =========================
+        shop_data = await self.bot.shop.find_one({"guild_id": str(interaction.guild.id)})
+
+        embed.add_field(
+            name="🛒 Shop Items",
+            value=(
+                "\n".join([
+                    f"• {item['name']} - ${item['price']}" +
+                    (f" (Role: <@&{item['role']}>)" if item.get("role") else "")
+                    for item in (shop_data.get("items", []) if shop_data else [])
+                ])
+                if shop_data and shop_data.get("items")
+                else "None"
+            ),
             inline=False
         )
 
