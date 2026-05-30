@@ -44,7 +44,9 @@ db = client["economy_db"]
 
 # collections
 bot.economy = db["economy"]
-bot.settings_db = db["settings"]  # ✅ IMPORTANT FIX (this is what you were missing)
+bot.settings_db = db["settings"]
+bot.shop = db["shop"]
+bot.shop_roles = db["shop_roles"]  # ✅ IMPORTANT FIX (this is what you were missing)
 
 # -------------------------
 # READY EVENT

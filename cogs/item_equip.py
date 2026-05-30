@@ -68,7 +68,7 @@ class Equip(commands.Cog):
         await interaction.user.add_roles(role)
 
         await interaction.response.send_message(
-            f"✅ You equipped **{item}** and received {role.mention}!"
+            f"✅ You equipped **{item}** and received {role.mention}!",
             ephemeral=True
         )
 
