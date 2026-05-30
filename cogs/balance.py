@@ -13,7 +13,7 @@ class Balance(commands.Cog):
         self.economy = bot.economy
 
     # -------------------------
-    # GET OR CREATE USER (ASYNC FIX)
+    # GET OR CREATE USER
     # -------------------------
     async def get_user(self, guild_id, user_id, name):
         return await self.economy.find_one_and_update(
@@ -22,8 +22,9 @@ class Balance(commands.Cog):
                 "$setOnInsert": {
                     "guild_id": str(guild_id),
                     "user_id": str(user_id),
-                    "balance": 0,
-                    "name": name
+                    "name": name,
+                    "balance": 0,   # wallet
+                    "bank": 0       # 🏦 added bank support
                 }
             },
             upsert=True,
@@ -44,8 +45,6 @@ class Balance(commands.Cog):
                 "❌ This command can only be used in servers.",
                 ephemeral=True
             )
-
-          # if you placed it in utils
 
         settings = await get_settings(self.bot, interaction.guild.id)
 
@@ -73,7 +72,9 @@ class Balance(commands.Cog):
             user.name
         )
 
-        balance = data.get("balance", 0)
+        wallet = data.get("balance", 0)
+        bank = data.get("bank", 0)
+        total = wallet + bank
 
         embed = discord.Embed(
             title="🏦 Balance",
@@ -83,13 +84,25 @@ class Balance(commands.Cog):
         embed.add_field(
             name="👤 User",
             value=user.mention,
+            inline=False
+        )
+
+        embed.add_field(
+            name="💰 Wallet",
+            value=f"${wallet}",
             inline=True
         )
 
         embed.add_field(
-            name="💰 Money",
-            value=f"${balance}",
+            name="🏦 Bank",
+            value=f"${bank}",
             inline=True
+        )
+
+        embed.add_field(
+            name="🧾 Total",
+            value=f"${total}",
+            inline=False
         )
 
         await interaction.followup.send(embed=embed)
