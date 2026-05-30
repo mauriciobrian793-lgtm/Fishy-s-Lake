@@ -48,7 +48,7 @@ class CollectIncome(commands.Cog):
         guild_id = str(interaction.guild.id)
         user = interaction.user
 
-        settings = self.bot.settings.setdefault(guild_id, {})
+        settings = await get_settings(self.bot, interaction.guild.id)
 
         allowed, remaining = check_cooldown(
             interaction.guild.id,
