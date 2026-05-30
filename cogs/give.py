@@ -77,7 +77,7 @@ class Give(commands.Cog):
                 ephemeral=True
             )
 
-        settings = await get_settings(self.bot, interaction.guild.id))
+        settings = await get_settings(self.bot, interaction.guild.id)
 
         allowed, remaining = check_cooldown(
             interaction.guild.id,
