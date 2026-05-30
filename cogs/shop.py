@@ -11,7 +11,7 @@ class BuyButton(discord.ui.Button):
 
     def __init__(self, item, economy):
         super().__init__(
-            label=f"Buy {item['name']} (${item['price']})",
+            label=f"{item['name']} (${item['price']})",
             style=discord.ButtonStyle.green
         )
         self.item = item
@@ -19,15 +19,15 @@ class BuyButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
 
-        user_id = interaction.user.id
-        guild_id = interaction.guild.id
+        guild_id = str(interaction.guild.id)
+        user_id = str(interaction.user.id)
 
         user = await self.economy.find_one_and_update(
-            {"guild_id": str(guild_id), "user_id": str(user_id)},
+            {"guild_id": guild_id, "user_id": user_id},
             {
                 "$setOnInsert": {
-                    "guild_id": str(guild_id),
-                    "user_id": str(user_id),
+                    "guild_id": guild_id,
+                    "user_id": user_id,
                     "name": interaction.user.name,
                     "balance": 0,
                     "bank": 0,
@@ -38,18 +38,11 @@ class BuyButton(discord.ui.Button):
             return_document=ReturnDocument.AFTER
         )
 
-        balance = user.get("balance", 0)
+        if user.get("balance", 0) < self.item["price"]:
+            return await interaction.response.send_message("❌ Not enough money.", ephemeral=True)
 
-        # ❌ not enough money
-        if balance < self.item["price"]:
-            return await interaction.response.send_message(
-                "❌ You don’t have enough money.",
-                ephemeral=True
-            )
-
-        # 💰 transaction
         await self.economy.update_one(
-            {"guild_id": str(guild_id), "user_id": str(user_id)},
+            {"guild_id": guild_id, "user_id": user_id},
             {
                 "$inc": {"balance": -self.item["price"]},
                 "$push": {"inventory": self.item["name"]}
@@ -57,13 +50,13 @@ class BuyButton(discord.ui.Button):
         )
 
         await interaction.response.send_message(
-            f"✅ You bought **{self.item['name']}**!",
+            f"✅ Bought **{self.item['name']}**!",
             ephemeral=True
         )
 
 
 # =========================
-# SHOP VIEW (UI)
+# SHOP VIEW
 # =========================
 class ShopView(discord.ui.View):
 
@@ -75,42 +68,40 @@ class ShopView(discord.ui.View):
 
 
 # =========================
-# SHOP COMMAND
+# SHOP COG
 # =========================
 class Shop(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
         self.economy = bot.economy
-        self.shop = bot.shop  # shop collection
+        self.shop = bot.shop
 
-    @app_commands.command(name="shop", description="Open the interactive shop")
+    @app_commands.command(name="shop", description="Open shop")
     async def shop_cmd(self, interaction: discord.Interaction):
 
-        if not interaction.guild:
-            return await interaction.response.send_message("Guild only command.")
-
-        shop_data = await self.shop.find_one({"guild_id": str(interaction.guild.id)})
+        data = await self.shop.find_one({"guild_id": str(interaction.guild.id)})
 
         embed = discord.Embed(
             title="🛒 Server Shop",
             color=discord.Color.blue()
         )
 
-        if not shop_data or not shop_data.get("items"):
-            embed.description = "The shop is empty right now."
+        if not data or not data.get("items"):
+            embed.description = "Shop is empty."
             return await interaction.response.send_message(embed=embed)
 
-        for item in shop_data["items"]:
+        for item in data["items"]:
             embed.add_field(
-                name=f"{item['name']} - ${item['price']}",
-                value=item.get("description", "No description"),
+                name=item["name"],
+                value=f"${item['price']}",
                 inline=False
             )
 
-        view = ShopView(shop_data["items"], self.economy)
-
-        await interaction.response.send_message(embed=embed, view=view)
+        await interaction.response.send_message(
+            embed=embed,
+            view=ShopView(data["items"], self.economy)
+        )
 
 
 async def setup(bot):

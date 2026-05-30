@@ -6,7 +6,7 @@ from utils import get_settings
 
 
 # =========================
-# SAVE SETTINGS HELPER
+# SAVE SETTINGS
 # =========================
 async def save_settings(bot, guild_id, settings):
     await bot.settings_db.update_one(
@@ -17,7 +17,7 @@ async def save_settings(bot, guild_id, settings):
 
 
 # =========================
-# MODALS
+# MODALS (EXISTING)
 # =========================
 class IncomeRoleModal(discord.ui.Modal):
 
@@ -26,14 +26,11 @@ class IncomeRoleModal(discord.ui.Modal):
         self.role_id = str(role_id)
         self.bot = bot
 
-        self.amount = discord.ui.TextInput(
-            label="Income amount per collect",
-            placeholder="Example: 500"
-        )
-
+        self.amount = TextInput(label="Income amount per collect", placeholder="500")
         self.add_item(self.amount)
 
     async def on_submit(self, interaction: discord.Interaction):
+
         settings = await get_settings(self.bot, interaction.guild.id)
 
         try:
@@ -42,13 +39,9 @@ class IncomeRoleModal(discord.ui.Modal):
             return await interaction.response.send_message("❌ Invalid number.", ephemeral=True)
 
         settings.setdefault("role_income", {})[self.role_id] = amount
-
         await save_settings(self.bot, interaction.guild.id, settings)
 
-        await interaction.response.send_message(
-            f"💰 Saved: <@&{self.role_id}> → `${amount}`",
-            ephemeral=True
-        )
+        await interaction.response.send_message(f"💰 Saved <@&{self.role_id}> → ${amount}", ephemeral=True)
 
 
 class CooldownModal(discord.ui.Modal):
@@ -58,14 +51,11 @@ class CooldownModal(discord.ui.Modal):
         self.command = command
         self.bot = bot
 
-        self.seconds = discord.ui.TextInput(
-            label="Seconds",
-            placeholder="60"
-        )
-
+        self.seconds = TextInput(label="Seconds", placeholder="60")
         self.add_item(self.seconds)
 
     async def on_submit(self, interaction: discord.Interaction):
+
         settings = await get_settings(self.bot, interaction.guild.id)
 
         try:
@@ -74,46 +64,39 @@ class CooldownModal(discord.ui.Modal):
             return await interaction.response.send_message("❌ Invalid number.", ephemeral=True)
 
         settings.setdefault("cooldowns", {})[self.command] = seconds
-
         await save_settings(self.bot, interaction.guild.id, settings)
 
-        await interaction.response.send_message(
-            f"⏱ Saved `{self.command}` → `{seconds}s`",
-            ephemeral=True
-        )
+        await interaction.response.send_message(f"⏱ Saved {self.command} → {seconds}s", ephemeral=True)
 
 
 # =========================
-# SHOP MODAL
+# 🛒 SHOP ADD MODAL
 # =========================
-class ShopItemModal(discord.ui.Modal, title="🛒 Add Shop Item"):
+class ShopAddModal(discord.ui.Modal, title="🛒 Add Shop Item"):
 
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
 
-        self.item_name = TextInput(label="Item Name")
+        self.name = TextInput(label="Item Name")
         self.price = TextInput(label="Price")
-        self.role_id = TextInput(label="Role ID (optional)", required=False)
+        self.role = TextInput(label="Role ID (optional)", required=False)
 
-        self.add_item(self.item_name)
+        self.add_item(self.name)
         self.add_item(self.price)
-        self.add_item(self.role_id)
+        self.add_item(self.role)
 
     async def on_submit(self, interaction: discord.Interaction):
 
         try:
             price = int(self.price.value)
         except:
-            return await interaction.response.send_message("❌ Price must be a number.", ephemeral=True)
+            return await interaction.response.send_message("❌ Invalid price", ephemeral=True)
 
-        item = {
-            "name": self.item_name.value,
-            "price": price
-        }
+        item = {"name": self.name.value, "price": price}
 
-        if self.role_id.value:
-            item["role"] = self.role_id.value
+        if self.role.value:
+            item["role"] = self.role.value
 
         await self.bot.shop.update_one(
             {"guild_id": str(interaction.guild.id)},
@@ -121,23 +104,50 @@ class ShopItemModal(discord.ui.Modal, title="🛒 Add Shop Item"):
             upsert=True
         )
 
-        await interaction.response.send_message(
-            f"✅ Added **{item['name']}** to shop!",
-            ephemeral=True
-        )
+        await interaction.response.send_message("✅ Item added to shop", ephemeral=True)
 
 
 # =========================
-# SELECT MENUS
+# 🛒 SHOP DELETE MODAL
+# =========================
+class ShopDeleteModal(discord.ui.Modal, title="❌ Delete Shop Item"):
+
+    def __init__(self, bot):
+        super().__init__()
+        self.bot = bot
+
+        self.name = TextInput(label="Item Name to Delete")
+        self.add_item(self.name)
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        shop = await self.bot.shop.find_one({"guild_id": str(interaction.guild.id)})
+
+        if not shop or not shop.get("items"):
+            return await interaction.response.send_message("❌ No shop items", ephemeral=True)
+
+        new_items = [i for i in shop["items"] if i["name"] != self.name.value]
+
+        await self.bot.shop.update_one(
+            {"guild_id": str(interaction.guild.id)},
+            {"$set": {"items": new_items}}
+        )
+
+        await interaction.response.send_message("🗑 Item deleted", ephemeral=True)
+
+
+# =========================
+# MAIN DROPDOWN
 # =========================
 class MainSelect(discord.ui.Select):
 
     def __init__(self):
         options = [
-            discord.SelectOption(label="admin_role", description="Set admin role"),
-            discord.SelectOption(label="cooldown", description="Set command cooldown"),
-            discord.SelectOption(label="income_role", description="Set income role"),
-            discord.SelectOption(label="shop_item", description="Add shop items"),
+            discord.SelectOption(label="admin_role"),
+            discord.SelectOption(label="cooldown"),
+            discord.SelectOption(label="income_role"),
+            discord.SelectOption(label="shop_add"),
+            discord.SelectOption(label="shop_delete"),
         ]
 
         super().__init__(placeholder="Choose setting", options=options)
@@ -150,34 +160,24 @@ class MainSelect(discord.ui.Select):
         choice = self.values[0]
 
         if choice == "admin_role":
-            await interaction.response.send_message(
-                "Select admin role:",
-                view=RoleView(interaction.guild.roles),
-                ephemeral=True
-            )
+            await interaction.response.send_message("Select role:", view=RoleView(interaction.guild.roles), ephemeral=True)
 
         elif choice == "cooldown":
-            await interaction.response.send_message(
-                "Select command:",
-                view=CommandView(),
-                ephemeral=True
-            )
+            await interaction.response.send_message("Select command:", view=CommandView(), ephemeral=True)
 
         elif choice == "income_role":
-            await interaction.response.send_message(
-                "Select income role:",
-                view=IncomeRoleView(interaction.guild.roles),
-                ephemeral=True
-            )
+            await interaction.response.send_message("Select role:", view=IncomeRoleView(interaction.guild.roles), ephemeral=True)
 
-        elif choice == "shop_item":
-            await interaction.response.send_message(
-                "🛒 Create a shop item:",
-                view=ShopItemView(),
-                ephemeral=True
-            )
+        elif choice == "shop_add":
+            await interaction.response.send_modal(ShopAddModal(interaction.client))
+
+        elif choice == "shop_delete":
+            await interaction.response.send_modal(ShopDeleteModal(interaction.client))
 
 
+# =========================
+# OTHER SELECTS (UNCHANGED)
+# =========================
 class CommandSelect(discord.ui.Select):
     def __init__(self):
         options = [
@@ -189,55 +189,37 @@ class CommandSelect(discord.ui.Select):
             discord.SelectOption(label="blackjack"),
             discord.SelectOption(label="collect_income"),
         ]
-
         super().__init__(placeholder="Select command", options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(
-            CooldownModal(self.values[0], interaction.client)
-        )
+        await interaction.response.send_modal(CooldownModal(self.values[0], interaction.client))
 
 
 class RoleSelect(discord.ui.Select):
 
     def __init__(self, roles):
-        roles = roles[:25]
-
-        options = [
-            discord.SelectOption(label=r.name, value=str(r.id))
-            for r in roles
-        ]
-
-        super().__init__(placeholder="Select role", options=options)
+        super().__init__(
+            placeholder="Select role",
+            options=[discord.SelectOption(label=r.name, value=str(r.id)) for r in roles[:25]]
+        )
 
     async def callback(self, interaction: discord.Interaction):
         settings = await get_settings(interaction.client, interaction.guild.id)
-
         settings["admin_role_id"] = self.values[0]
         await save_settings(interaction.client, interaction.guild.id, settings)
-
-        await interaction.response.send_message(
-            f"🛡 Admin role set → <@&{self.values[0]}>",
-            ephemeral=True
-        )
+        await interaction.response.send_message("🛡 Admin role set", ephemeral=True)
 
 
 class IncomeRoleSelect(discord.ui.Select):
 
     def __init__(self, roles):
-        roles = roles[:25]
-
-        options = [
-            discord.SelectOption(label=r.name, value=str(r.id))
-            for r in roles
-        ]
-
-        super().__init__(placeholder="Select income role", options=options)
+        super().__init__(
+            placeholder="Select income role",
+            options=[discord.SelectOption(label=r.name, value=str(r.id)) for r in roles[:25]]
+        )
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(
-            IncomeRoleModal(self.values[0], interaction.client)
-        )
+        await interaction.response.send_modal(IncomeRoleModal(self.values[0], interaction.client))
 
 
 # =========================
@@ -267,19 +249,6 @@ class IncomeRoleView(discord.ui.View):
         self.add_item(IncomeRoleSelect(roles))
 
 
-class ShopItemView(discord.ui.View):
-
-    def __init__(self):
-        super().__init__()
-
-    @discord.ui.button(label="➕ Create Shop Item", style=discord.ButtonStyle.green)
-    async def create(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        await interaction.response.send_modal(
-            ShopItemModal(interaction.client)
-        )
-
-
 # =========================
 # DASHBOARD
 # =========================
@@ -288,53 +257,29 @@ class Dashboard(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="dashboard", description="Economy control panel")
+    @app_commands.command(name="dashboard")
     async def dashboard(self, interaction: discord.Interaction):
 
-        if not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message("❌ Admin only", ephemeral=True)
-
         settings = await get_settings(self.bot, interaction.guild.id)
+        shop = await self.bot.shop.find_one({"guild_id": str(interaction.guild.id)})
 
-        embed = discord.Embed(
-            title="⚙️ Economy Dashboard",
-            color=discord.Color.blurple()
-        )
+        embed = discord.Embed(title="⚙️ Economy Dashboard", color=discord.Color.blurple())
 
-        embed.add_field(
-            name="🛡 Admin Role",
-            value=f"<@&{settings.get('admin_role_id')}>" if settings.get("admin_role_id") else "None",
-            inline=False
-        )
+        embed.add_field(name="🛡 Admin Role",
+                        value=f"<@&{settings.get('admin_role_id')}>" if settings.get("admin_role_id") else "None",
+                        inline=False)
 
-        embed.add_field(
-            name="⏱ Cooldowns",
-            value="\n".join([f"{k} → {v}s" for k, v in settings.get("cooldowns", {}).items()]) or "None",
-            inline=False
-        )
+        embed.add_field(name="⏱ Cooldowns",
+                        value="\n".join([f"{k} → {v}s" for k, v in settings.get("cooldowns", {}).items()]) or "None",
+                        inline=False)
 
-        embed.add_field(
-            name="💼 Income Roles",
-            value="\n".join([f"<@&{k}> → ${v}" for k, v in settings.get("role_income", {}).items()]) or "None",
-            inline=False
-        )
-
-        # =========================
-        # 🛒 SHOP DISPLAY (ADDED)
-        # =========================
-        shop_data = await self.bot.shop.find_one({"guild_id": str(interaction.guild.id)})
+        embed.add_field(name="💼 Income Roles",
+                        value="\n".join([f"<@&{k}> → ${v}" for k, v in settings.get("role_income", {}).items()]) or "None",
+                        inline=False)
 
         embed.add_field(
             name="🛒 Shop Items",
-            value=(
-                "\n".join([
-                    f"• {item['name']} - ${item['price']}" +
-                    (f" (Role: <@&{item['role']}>)" if item.get("role") else "")
-                    for item in (shop_data.get("items", []) if shop_data else [])
-                ])
-                if shop_data and shop_data.get("items")
-                else "None"
-            ),
+            value="\n".join([f"{i['name']} - ${i['price']}" for i in (shop.get("items") if shop else [])]) or "None",
             inline=False
         )
 
