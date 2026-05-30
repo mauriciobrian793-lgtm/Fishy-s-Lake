@@ -1,10 +1,11 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from utils import get_settings  # ✅ FIXED IMPORT
 
 
 # =========================
-# ROLE INCOME MODAL
+# MODALS
 # =========================
 class IncomeRoleModal(discord.ui.Modal):
 
@@ -44,9 +45,6 @@ class IncomeRoleModal(discord.ui.Modal):
         )
 
 
-# =========================
-# COOLDOWN MODAL
-# =========================
 class CooldownModal(discord.ui.Modal):
 
     def __init__(self, command, bot):
@@ -146,17 +144,14 @@ class RoleView(discord.ui.View):
 
 
 # =========================
-# DASHBOARD COG
+# DASHBOARD
 # =========================
 class Dashboard(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(
-        name="dashboard",
-        description="Economy control panel"
-    )
+    @app_commands.command(name="dashboard", description="Economy control panel")
     async def dashboard(self, interaction: discord.Interaction):
 
         if not interaction.guild:
@@ -171,15 +166,14 @@ class Dashboard(commands.Cog):
                 ephemeral=True
             )
 
-        guild_id = str(interaction.guild.id)
-        settings = self.bot.settings.setdefault(guild_id, {})
+        settings = await get_settings(self.bot, interaction.guild.id)
 
         admin_role = settings.get("admin_role_id")
         cooldowns = settings.get("cooldowns", {})
         role_income = settings.get("role_income", {})
 
         # =========================
-        # V2 STYLE EMBED (CLEAN UI)
+        # EMBED
         # =========================
         embed = discord.Embed(
             title="⚙️ Economy Dashboard V2",
@@ -206,7 +200,7 @@ class Dashboard(commands.Cog):
         )
 
         # =========================
-        # MAIN MENU VIEW
+        # VIEW
         # =========================
         class MainView(discord.ui.View):
 
@@ -215,8 +209,6 @@ class Dashboard(commands.Cog):
 
                 if not interaction2.user.guild_permissions.administrator:
                     return await interaction2.response.send_message("❌ Admin only", ephemeral=True)
-
-                settings["admin_role_id"] = None  # ensures key exists properly
 
                 await interaction2.response.send_message(
                     "Select admin role:",
