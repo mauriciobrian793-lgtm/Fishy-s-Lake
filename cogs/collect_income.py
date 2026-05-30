@@ -1,9 +1,8 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from utils import check_cooldown
+from utils import check_cooldown, get_settings
 from pymongo import ReturnDocument
-from utils import get_settings
 
 
 class CollectIncome(commands.Cog):
@@ -34,22 +33,13 @@ class CollectIncome(commands.Cog):
             upsert=True
         )
 
-    @app_commands.command(
-        name="collect_income",
-        description="Collect money from your job roles"
-    )
+    @app_commands.command(name="collect_income", description="Collect money from your job roles")
     async def collect_income(self, interaction: discord.Interaction):
 
         if not interaction.guild:
-            return await interaction.response.send_message(
-                "❌ This command can only be used in a server.",
-                ephemeral=True
-            )
+            return await interaction.response.send_message("❌ Server only", ephemeral=True)
 
-        guild_id = str(interaction.guild.id)
-        user = interaction.user
-
-        settings = await get_settings(self.bot, interaction.guild.id)
+        settings = await get_settings(self.bot, interaction.guild.id) or {}
 
         allowed, remaining = check_cooldown(
             interaction.guild.id,
@@ -60,23 +50,22 @@ class CollectIncome(commands.Cog):
 
         if not allowed:
             return await interaction.response.send_message(
-                f"⏳ Wait {remaining}s before collecting income again.",
+                f"⏳ Wait {remaining}s",
                 ephemeral=True
             )
 
         role_income = settings.get("role_income", {})
 
         if not role_income:
-            return await interaction.response.send_message(
-                "❌ No income roles have been set yet.",
-                ephemeral=True
-            )
+            return await interaction.response.send_message("❌ No income roles set", ephemeral=True)
 
         total = 0
         breakdown = []
 
-        # SAFE ROLE LOOP
-        for role in getattr(user, "roles", []):
+        for role in getattr(interaction.user, "roles", []):
+            if not role:
+                continue
+
             rid = str(role.id)
 
             if rid in role_income:
@@ -85,36 +74,16 @@ class CollectIncome(commands.Cog):
                 breakdown.append(f"• {role.name}: +${amount}")
 
         if total == 0:
-            return await interaction.response.send_message(
-                "❌ You don't have any income roles.",
-                ephemeral=True
-            )
+            return await interaction.response.send_message("❌ No income roles", ephemeral=True)
 
-        await self.add_money(guild_id, user.id, total)
-        updated = await self.get_user(guild_id, user.id, user.name)
+        await self.add_money(interaction.guild.id, interaction.user.id, total)
+        updated = await self.get_user(interaction.guild.id, interaction.user.id, interaction.user.name)
 
-        embed = discord.Embed(
-            title="💰 Income Collected",
-            color=discord.Color.green()
-        )
+        embed = discord.Embed(title="💰 Income Collected", color=discord.Color.green())
 
-        embed.add_field(
-            name="💼 Breakdown",
-            value="\n".join(breakdown),
-            inline=False
-        )
-
-        embed.add_field(
-            name="💵 Total Earned",
-            value=f"${total}",
-            inline=True
-        )
-
-        embed.add_field(
-            name="🏦 New Balance",
-            value=f"${updated.get('balance', 0)}",
-            inline=True
-        )
+        embed.add_field(name="Breakdown", value="\n".join(breakdown), inline=False)
+        embed.add_field(name="Total", value=f"${total}", inline=True)
+        embed.add_field(name="Balance", value=f"${updated.get('balance', 0)}", inline=True)
 
         await interaction.response.send_message(embed=embed)
 

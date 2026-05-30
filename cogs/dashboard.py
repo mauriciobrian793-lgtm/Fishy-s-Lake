@@ -33,7 +33,6 @@ class IncomeRoleModal(discord.ui.Modal):
         self.add_item(self.amount)
 
     async def on_submit(self, interaction: discord.Interaction):
-
         settings = await get_settings(self.bot, interaction.guild.id)
 
         try:
@@ -66,7 +65,6 @@ class CooldownModal(discord.ui.Modal):
         self.add_item(self.seconds)
 
     async def on_submit(self, interaction: discord.Interaction):
-
         settings = await get_settings(self.bot, interaction.guild.id)
 
         try:
@@ -87,8 +85,47 @@ class CooldownModal(discord.ui.Modal):
 # =========================
 # SELECT MENUS
 # =========================
-class CommandSelect(discord.ui.Select):
+class MainSelect(discord.ui.Select):
 
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="admin_role", description="Set admin role"),
+            discord.SelectOption(label="cooldown", description="Set command cooldown"),
+            discord.SelectOption(label="income_role", description="Set income role"),
+        ]
+
+        super().__init__(placeholder="Choose setting", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Admin only", ephemeral=True)
+
+        choice = self.values[0]
+
+        if choice == "admin_role":
+            await interaction.response.send_message(
+                "Select admin role:",
+                view=RoleView(interaction.guild.roles),
+                ephemeral=True
+            )
+
+        elif choice == "cooldown":
+            await interaction.response.send_message(
+                "Select command:",
+                view=CommandView(),
+                ephemeral=True
+            )
+
+        elif choice == "income_role":
+            await interaction.response.send_message(
+                "Select income role:",
+                view=IncomeRoleView(interaction.guild.roles),
+                ephemeral=True
+            )
+
+
+class CommandSelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label="work"),
@@ -123,7 +160,6 @@ class RoleSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         settings = await get_settings(interaction.client, interaction.guild.id)
 
-        # SAVE ADMIN ROLE PROPERLY HERE IF USED
         settings["admin_role_id"] = self.values[0]
         await save_settings(interaction.client, interaction.guild.id, settings)
 
@@ -154,6 +190,12 @@ class IncomeRoleSelect(discord.ui.Select):
 # =========================
 # VIEWS
 # =========================
+class MainView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(MainSelect())
+
+
 class CommandView(discord.ui.View):
     def __init__(self):
         super().__init__()
@@ -210,42 +252,6 @@ class Dashboard(commands.Cog):
             value="\n".join([f"<@&{k}> → ${v}" for k, v in settings.get("role_income", {}).items()]) or "None",
             inline=False
         )
-
-        class MainView(discord.ui.View):
-
-            @discord.ui.select(
-                placeholder="Choose setting",
-                options=[
-                    discord.SelectOption(label="Set Admin Role"),
-                    discord.SelectOption(label="Set Cooldown"),
-                    discord.SelectOption(label="Set Income Role"),
-                ]
-            )
-            async def menu(self, interaction2: discord.Interaction, select: discord.ui.Select):
-
-                if not interaction2.user.guild_permissions.administrator:
-                    return await interaction2.response.send_message("❌ Admin only", ephemeral=True)
-
-                if select.values[0] == "Set Admin Role":
-                    await interaction2.response.send_message(
-                        "Select admin role:",
-                        view=RoleView(interaction.guild.roles),
-                        ephemeral=True
-                    )
-
-                elif select.values[0] == "Set Cooldown":
-                    await interaction2.response.send_message(
-                        "Select command:",
-                        view=CommandView(),
-                        ephemeral=True
-                    )
-
-                elif select.values[0] == "Set Income Role":
-                    await interaction2.response.send_message(
-                        "Select income role:",
-                        view=IncomeRoleView(interaction.guild.roles),
-                        ephemeral=True
-                    )
 
         await interaction.response.send_message(embed=embed, view=MainView())
 
