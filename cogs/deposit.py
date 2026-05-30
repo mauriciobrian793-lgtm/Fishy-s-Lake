@@ -52,28 +52,41 @@ class Deposit(commands.Cog):
 
         wallet = user.get("balance", 0)
 
+        # -------------------------
+        # HANDLE "all"
+        # -------------------------
         if amount.lower() == "all":
-            amount = wallet
+            deposit_amount = wallet
         else:
             try:
-                amount = int(amount)
-            except:
-                return await interaction.response.send_message("❌ Invalid amount.")
+                deposit_amount = int(amount)
+            except ValueError:
+                return await interaction.response.send_message("❌ Please enter a valid number or `all`.")
 
-        if amount <= 0:
-            return await interaction.response.send_message("❌ Amount must be greater than 0.")
+        # -------------------------
+        # VALIDATION FIXES
+        # -------------------------
+        if deposit_amount <= 0:
+            return await interaction.response.send_message("❌ You must deposit more than $0.")
 
-        if wallet < amount:
-            return await interaction.response.send_message("❌ Not enough money in wallet.")
+        if deposit_amount > wallet:
+            return await interaction.response.send_message(
+                f"❌ You only have **${wallet}** in your wallet."
+            )
 
+        # -------------------------
+        # UPDATE MONGO SAFELY
+        # -------------------------
         await self.update_bank(
             interaction.guild.id,
             interaction.user.id,
-            wallet_change=-amount,
-            bank_change=amount
+            wallet_change=-deposit_amount,
+            bank_change=deposit_amount
         )
 
-        await interaction.response.send_message(f"🏦 Deposited **${amount}** into your bank!")
+        await interaction.response.send_message(
+            f"🏦 Deposited **${deposit_amount}** into your bank!"
+        )
 
 
 async def setup(bot):

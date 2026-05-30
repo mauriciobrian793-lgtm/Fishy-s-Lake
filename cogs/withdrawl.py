@@ -52,28 +52,41 @@ class Withdraw(commands.Cog):
 
         bank = user.get("bank", 0)
 
+        # -------------------------
+        # HANDLE "all"
+        # -------------------------
         if amount.lower() == "all":
-            amount = bank
+            withdraw_amount = bank
         else:
             try:
-                amount = int(amount)
-            except:
-                return await interaction.response.send_message("❌ Invalid amount.")
+                withdraw_amount = int(amount)
+            except ValueError:
+                return await interaction.response.send_message("❌ Please enter a valid number or `all`.")
 
-        if amount <= 0:
-            return await interaction.response.send_message("❌ Amount must be greater than 0.")
+        # -------------------------
+        # VALIDATION FIXES
+        # -------------------------
+        if withdraw_amount <= 0:
+            return await interaction.response.send_message("❌ You must withdraw more than $0.")
 
-        if bank < amount:
-            return await interaction.response.send_message("❌ Not enough money in bank.")
+        if withdraw_amount > bank:
+            return await interaction.response.send_message(
+                f"❌ You only have **${bank}** in your bank."
+            )
 
+        # -------------------------
+        # UPDATE MONGO SAFELY
+        # -------------------------
         await self.update_bank(
             interaction.guild.id,
             interaction.user.id,
-            wallet_change=amount,
-            bank_change=-amount
+            wallet_change=withdraw_amount,
+            bank_change=-withdraw_amount
         )
 
-        await interaction.response.send_message(f"💰 Withdrew **${amount}** from your bank!")
+        await interaction.response.send_message(
+            f"💰 Withdrew **${withdraw_amount}** from your bank!"
+        )
 
 
 async def setup(bot):
