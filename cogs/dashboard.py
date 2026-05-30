@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from discord.ui import Modal, TextInput
 from utils import get_settings
 
 
@@ -83,6 +84,50 @@ class CooldownModal(discord.ui.Modal):
 
 
 # =========================
+# 🛒 SHOP MODAL (ADDED FIX)
+# =========================
+class ShopItemModal(discord.ui.Modal, title="🛒 Add Shop Item"):
+
+    def __init__(self, bot):
+        super().__init__()
+        self.bot = bot
+
+        self.item_name = discord.ui.TextInput(label="Item Name")
+        self.price = discord.ui.TextInput(label="Price")
+        self.role_id = discord.ui.TextInput(label="Role ID (optional)", required=False)
+
+        self.add_item(self.item_name)
+        self.add_item(self.price)
+        self.add_item(self.role_id)
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        try:
+            price = int(self.price.value)
+        except:
+            return await interaction.response.send_message("❌ Price must be a number.", ephemeral=True)
+
+        item = {
+            "name": self.item_name.value,
+            "price": price
+        }
+
+        if self.role_id.value:
+            item["role"] = self.role_id.value
+
+        await self.bot.shop.update_one(
+            {"guild_id": str(interaction.guild.id)},
+            {"$push": {"items": item}},
+            upsert=True
+        )
+
+        await interaction.response.send_message(
+            f"✅ Added **{item['name']}** to shop!",
+            ephemeral=True
+        )
+
+
+# =========================
 # SELECT MENUS
 # =========================
 class MainSelect(discord.ui.Select):
@@ -92,6 +137,7 @@ class MainSelect(discord.ui.Select):
             discord.SelectOption(label="admin_role", description="Set admin role"),
             discord.SelectOption(label="cooldown", description="Set command cooldown"),
             discord.SelectOption(label="income_role", description="Set income role"),
+            discord.SelectOption(label="shop_item", description="Add shop items"),
         ]
 
         super().__init__(placeholder="Choose setting", options=options)
@@ -121,6 +167,13 @@ class MainSelect(discord.ui.Select):
             await interaction.response.send_message(
                 "Select income role:",
                 view=IncomeRoleView(interaction.guild.roles),
+                ephemeral=True
+            )
+
+        elif choice == "shop_item":
+            await interaction.response.send_message(
+                "🛒 Create a shop item:",
+                view=ShopItemView(),
                 ephemeral=True
             )
 
@@ -212,6 +265,22 @@ class IncomeRoleView(discord.ui.View):
     def __init__(self, roles):
         super().__init__()
         self.add_item(IncomeRoleSelect(roles))
+
+
+# =========================
+# SHOP VIEW BUTTON
+# =========================
+class ShopItemView(discord.ui.View):
+
+    def __init__(self):
+        super().__init__()
+
+    @discord.ui.button(label="➕ Create Shop Item", style=discord.ButtonStyle.green)
+    async def create(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        await interaction.response.send_modal(
+            ShopItemModal(interaction.client)
+        )
 
 
 # =========================
