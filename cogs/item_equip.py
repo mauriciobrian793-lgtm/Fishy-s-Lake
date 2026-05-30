@@ -5,11 +5,11 @@ from pymongo import ReturnDocument
 
 
 # =========================
-# SELECT MENU (ITEM PICKER)
+# DROPDOWN
 # =========================
 class EquipSelect(discord.ui.Select):
 
-    def __init__(self, items, shop_roles, user_inventory):
+    def __init__(self, items, user_inventory):
 
         options = []
 
@@ -22,14 +22,21 @@ class EquipSelect(discord.ui.Select):
                     )
                 )
 
-        super().__init__(
-            placeholder="Select an item to equip",
-            options=options if options else [
-                discord.SelectOption(label="No items", description="You own nothing", value="none")
+        if not options:
+            options = [
+                discord.SelectOption(
+                    label="No items",
+                    description="You don't own anything",
+                    value="none"
+                )
             ]
+
+        super().__init__(
+            placeholder="Select item to equip",
+            options=options
         )
 
-        self.shop_roles = shop_roles
+        self.items = items
 
     async def callback(self, interaction: discord.Interaction):
 
@@ -38,20 +45,19 @@ class EquipSelect(discord.ui.Select):
 
         item_name = self.values[0]
 
-        data = await self.shop_roles.find_one({"guild_id": str(interaction.guild.id)})
+        # find item in shop
+        item = next((i for i in self.items if i["name"] == item_name), None)
 
-        if not data:
-            return await interaction.response.send_message("❌ No role mappings found.", ephemeral=True)
+        if not item:
+            return await interaction.response.send_message("❌ Item not found.", ephemeral=True)
 
-        role_id = data.get("items", {}).get(item_name)
+        if not item.get("role"):
+            return await interaction.response.send_message("❌ This item has no role.", ephemeral=True)
 
-        if not role_id:
-            return await interaction.response.send_message("❌ This item has no role assigned.", ephemeral=True)
-
-        role = interaction.guild.get_role(int(role_id))
+        role = interaction.guild.get_role(int(item["role"]))
 
         if not role:
-            return await interaction.response.send_message("❌ Role not found.", ephemeral=True)
+            return await interaction.response.send_message("❌ Role missing or deleted.", ephemeral=True)
 
         await interaction.user.add_roles(role)
 
@@ -66,9 +72,9 @@ class EquipSelect(discord.ui.Select):
 # =========================
 class EquipView(discord.ui.View):
 
-    def __init__(self, items, shop_roles, user_inventory):
+    def __init__(self, items, inventory):
         super().__init__(timeout=60)
-        self.add_item(EquipSelect(items, shop_roles, user_inventory))
+        self.add_item(EquipSelect(items, inventory))
 
 
 # =========================
@@ -79,7 +85,7 @@ class Equip(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.economy = bot.economy
-        self.shop_roles = bot.shop_roles
+        self.shop = bot.shop
 
     async def get_user(self, guild_id, user_id, name):
         return await self.economy.find_one_and_update(
@@ -98,7 +104,7 @@ class Equip(commands.Cog):
             return_document=ReturnDocument.AFTER
         )
 
-    @app_commands.command(name="equip", description="Equip an item from your inventory")
+    @app_commands.command(name="equip", description="Equip an item")
     async def equip(self, interaction: discord.Interaction):
 
         user = await self.get_user(
@@ -111,27 +117,21 @@ class Equip(commands.Cog):
 
         if not inventory:
             return await interaction.response.send_message(
-                "❌ You have no items in your inventory.",
+                "❌ You have no items.",
                 ephemeral=True
             )
 
-        shop_data = await self.bot.shop.find_one(
-            {"guild_id": str(interaction.guild.id)}
-        )
+        shop_data = await self.shop.find_one({"guild_id": str(interaction.guild.id)})
 
         if not shop_data or not shop_data.get("items"):
             return await interaction.response.send_message(
-                "❌ No shop data found.",
+                "❌ Shop is empty.",
                 ephemeral=True
             )
 
         await interaction.response.send_message(
             "🎒 Choose an item to equip:",
-            view=EquipView(
-                shop_data["items"],
-                self.shop_roles,
-                inventory
-            ),
+            view=EquipView(shop_data["items"], inventory),
             ephemeral=True
         )
 
