@@ -28,6 +28,13 @@ class Help(commands.Cog):
             "`/fish_race` - Bet on a fish race\n"
             "`/roulette` - Play roulette to win money\n"
             "`/blackjack` - Play blackjack to win money\n"
+            "`/equip` - Equip an item\n"
+            "`/inventory` - View your owned items\n"
+            "`/shop` - View the server shop\n"
+            "`/withdraw` - Withdraw money from your bank\n"
+            "`/deposit` - Deposit money into your bank\n"
+            "`/help` - View this help menu\n"
+            "More commands may be added in the future!"
         ), inline=False)
 
         embed.add_field(name="⚙️ Admin Commands", value=(
