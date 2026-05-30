@@ -34,6 +34,7 @@ class Help(commands.Cog):
             "`/withdraw` - Withdraw money from your bank\n"
             "`/deposit` - Deposit money into your bank\n"
             "`/help` - View this help menu\n"
+            "`/suggest` - Suggest a feature or improvement\n"
             "More commands may be added in the future!"
         ), inline=False)
 
