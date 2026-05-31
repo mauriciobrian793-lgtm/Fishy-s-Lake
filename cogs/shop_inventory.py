@@ -9,7 +9,7 @@ class Inventory(commands.Cog):
         self.bot = bot
         self.economy = bot.economy
 
-    @app_commands.command(name="inventory", description="View your items")
+    @app_commands.command(name="inventory", description="View your inventory")
     async def inventory(self, interaction: discord.Interaction):
 
         user = await self.economy.find_one({
@@ -17,19 +17,25 @@ class Inventory(commands.Cog):
             "user_id": str(interaction.user.id)
         })
 
-        items = user.get("inventory", []) if user else []
+        if not user or not user.get("inventory"):
+            return await interaction.response.send_message("📦 Your inventory is empty.")
+
+        raw_items = user.get("inventory", [])
+
+        # 🔧 FIX: support BOTH formats (string + dict)
+        items = []
+        for item in raw_items:
+            if isinstance(item, dict):
+                items.append(item.get("name", "Unknown Item"))
+            else:
+                items.append(str(item))
 
         embed = discord.Embed(
-            title="🎒 Inventory",
+            title="🎒 Your Inventory",
             color=discord.Color.green()
         )
 
-        if not items:
-            embed.description = "You own nothing."
-        else:
-            embed.description = "\n".join(
-                [f"• {item['name']}" for item in items]
-            )
+        embed.description = "\n".join([f"• {i}" for i in items]) or "Empty"
 
         await interaction.response.send_message(embed=embed)
 
