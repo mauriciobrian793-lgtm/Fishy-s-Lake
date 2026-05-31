@@ -17,43 +17,40 @@ class Inventory(commands.Cog):
             "user_id": str(interaction.user.id)
         })
 
-        if not user:
-            return await interaction.response.send_message("📦 You have no data yet.")
+        raw_items = user.get("inventory", []) if user else []
 
-        raw_items = user.get("inventory", [])
-
-        if not raw_items:
-            return await interaction.response.send_message("📦 Your inventory is empty.")
-
-        # =========================
-        # CLEAN INVENTORY (FIXED)
-        # =========================
-        clean_items = []
+        # 🔧 Normalize EVERYTHING into strings
+        items = []
 
         for item in raw_items:
 
-            # dict format: {"name": "..."}
+            # old broken format: {"name": "Sword"}
             if isinstance(item, dict):
                 name = item.get("name")
                 if name:
-                    clean_items.append(name)
+                    items.append(str(name))
 
-            # string format: "item"
+            # correct format: "Sword"
             elif isinstance(item, str):
-                clean_items.append(item)
+                items.append(item)
 
-        # remove duplicates while keeping order
-        clean_items = list(dict.fromkeys(clean_items))
+            # ignore anything else (prevents crashes)
+            else:
+                continue
 
-        # =========================
-        # EMBED
-        # =========================
+        # 🧹 Remove duplicates + empty strings (optional cleanup)
+        items = [i for i in items if i]
+        items = list(dict.fromkeys(items))
+
+        if not items:
+            return await interaction.response.send_message("📦 Your inventory is empty.")
+
         embed = discord.Embed(
             title="🎒 Your Inventory",
             color=discord.Color.green()
         )
 
-        embed.description = "\n".join(f"• {i}" for i in clean_items) or "Empty"
+        embed.description = "\n".join([f"• {item}" for item in items])
 
         await interaction.response.send_message(embed=embed)
 

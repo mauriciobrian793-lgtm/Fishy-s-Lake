@@ -9,7 +9,7 @@ class Shop(commands.Cog):
         self.bot = bot
         self.shop = bot.shop
 
-    @app_commands.command(name="shop")
+    @app_commands.command(name="shop", description="View the server shop")
     async def shop_cmd(self, interaction: discord.Interaction):
 
         data = await self.shop.find_one({"guild_id": str(interaction.guild.id)})
@@ -20,11 +20,10 @@ class Shop(commands.Cog):
         )
 
         if not data or not data.get("items"):
-            embed.description = "Shop is empty."
+            embed.description = "The shop is empty."
             return await interaction.response.send_message(embed=embed)
 
         for item in data["items"]:
-
             role_text = f"<@&{item['role_id']}>" if item.get("role_id") else "No role"
 
             embed.add_field(

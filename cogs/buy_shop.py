@@ -1,55 +1,38 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from pymongo import ReturnDocument
 
 
-# =========================
-# BUY SELECT MENU
-# =========================
-class BuySelect(discord.ui.Select):
+class Buy(commands.Cog):
 
-    def __init__(self, items):
-        options = []
+    def __init__(self, bot):
+        self.bot = bot
+        self.economy = bot.economy
+        self.shop = bot.shop
 
-        for item in items:
-            options.append(
-                discord.SelectOption(
-                    label=item["name"],
-                    description=f"${item['price']}"
-                )
-            )
+    @app_commands.command(name="buy", description="Buy an item from the shop")
+    async def buy(self, interaction: discord.Interaction, item_name: str):
 
-        super().__init__(
-            placeholder="Select an item to buy",
-            options=options
+        shop_data = await self.shop.find_one({"guild_id": str(interaction.guild.id)})
+
+        if not shop_data or not shop_data.get("items"):
+            return await interaction.response.send_message("❌ Shop is empty.")
+
+        item = next(
+            (i for i in shop_data["items"]
+             if i["name"].lower() == item_name.lower()),
+            None
         )
 
-        self.items = items
+        if not item:
+            return await interaction.response.send_message("❌ Item not found.")
 
-    async def callback(self, interaction: discord.Interaction):
-
-        chosen = None
-
-        for item in self.items:
-            if item["name"] == self.values[0]:
-                chosen = item
-                break
-
-        if not chosen:
-            return await interaction.response.send_message("❌ Item not found.", ephemeral=True)
-
-        economy = interaction.client.economy
-
-        guild_id = str(interaction.guild.id)
-        user_id = str(interaction.user.id)
-
-        user = await economy.find_one_and_update(
-            {"guild_id": guild_id, "user_id": user_id},
+        user = await self.economy.find_one_and_update(
+            {"guild_id": str(interaction.guild.id), "user_id": str(interaction.user.id)},
             {
                 "$setOnInsert": {
-                    "guild_id": guild_id,
-                    "user_id": user_id,
+                    "guild_id": str(interaction.guild.id),
+                    "user_id": str(interaction.user.id),
                     "name": interaction.user.name,
                     "balance": 0,
                     "bank": 0,
@@ -57,65 +40,25 @@ class BuySelect(discord.ui.Select):
                 }
             },
             upsert=True,
-            return_document=ReturnDocument.AFTER
+            return_document=True
         )
 
-        if user.get("balance", 0) < chosen["price"]:
-            return await interaction.response.send_message("❌ Not enough money.", ephemeral=True)
+        if user.get("balance", 0) < item["price"]:
+            return await interaction.response.send_message("❌ Not enough money.")
 
-        await economy.update_one(
-            {"guild_id": guild_id, "user_id": user_id},
+        # subtract + add item
+        await self.economy.update_one(
+            {"guild_id": str(interaction.guild.id), "user_id": str(interaction.user.id)},
             {
-                "$inc": {"balance": -chosen["price"]},
-                "$push": {"inventory": chosen["name"]}
+                "$inc": {"balance": -item["price"]},
+                "$push": {"inventory": item["name"]}
             }
         )
 
-        await interaction.response.send_message(
-            f"✅ Bought **{chosen['name']}** for ${chosen['price']}!",
-            ephemeral=True
-        )
+        # role give
+        if item.get("role_id"):
+            role = interaction.guild.get_role(int(item["role_id"]))
+            if role:
+                await interaction.user.add_roles(role)
 
-
-# =========================
-# VIEW
-# =========================
-class BuyView(discord.ui.View):
-
-    def __init__(self, items):
-        super().__init__(timeout=60)
-        self.add_item(BuySelect(items))
-
-
-# =========================
-# BUY COMMAND
-# =========================
-class Buy(commands.Cog):
-
-    def __init__(self, bot):
-        self.bot = bot
-        self.shop = bot.shop
-
-    @app_commands.command(name="buy", description="Buy an item from the shop")
-    async def buy(self, interaction: discord.Interaction):
-
-        data = await self.shop.find_one({"guild_id": str(interaction.guild.id)})
-
-        if not data or not data.get("items"):
-            return await interaction.response.send_message("❌ Shop is empty.", ephemeral=True)
-
-        embed = discord.Embed(
-            title="🛒 Select Item to Buy",
-            description="Choose an item from the dropdown below.",
-            color=discord.Color.green()
-        )
-
-        await interaction.response.send_message(
-            embed=embed,
-            view=BuyView(data["items"]),
-            ephemeral=True
-        )
-
-
-async def setup(bot):
-    await bot.add_cog(Buy(bot))
+        await interaction.response.send_message(f"✅ Bought **{item['name']}**!")
