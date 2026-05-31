@@ -37,7 +37,7 @@ class CollectIncome(commands.Cog):
     async def collect_income(self, interaction: discord.Interaction):
 
         if not interaction.guild:
-            return await interaction.response.send_message("❌ Server only", ephemeral=True)
+            return await interaction.response.send_message("Server only", ephemeral=True)
 
         settings = await get_settings(self.bot, interaction.guild.id) or {}
 
