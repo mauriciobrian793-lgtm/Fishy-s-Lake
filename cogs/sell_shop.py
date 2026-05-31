@@ -2,24 +2,39 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
+
 class SellView(discord.ui.View):
 
-    def __init__(self, items, shop, economy):
+    def __init__(self, bot, items):
         super().__init__(timeout=60)
-        self.shop = shop
-        self.economy = economy
+        self.bot = bot
 
-        options = [
-            discord.SelectOption(
-                label=item["name"],
-                value=item["item_id"]
-            )
-            for item in items
-        ]
+        # ✅ SAFE: only handle string-based inventory items
+        options = []
+
+        for item in items:
+            if isinstance(item, str):
+                options.append(
+                    discord.SelectOption(
+                        label=item,
+                        value=item
+                    )
+                )
+            elif isinstance(item, dict):
+                name = item.get("name")
+                if name:
+                    options.append(
+                        discord.SelectOption(
+                            label=name,
+                            value=name
+                        )
+                    )
 
         self.select = discord.ui.Select(
             placeholder="Select item to sell",
-            options=options
+            options=options if options else [
+                discord.SelectOption(label="No items", value="none")
+            ]
         )
 
         self.select.callback = self.sell_callback
@@ -27,47 +42,40 @@ class SellView(discord.ui.View):
 
     async def sell_callback(self, interaction: discord.Interaction):
 
-        item_id = self.select.values[0]
+        if self.select.values[0] == "none":
+            return await interaction.response.send_message("❌ Nothing to sell.", ephemeral=True)
 
-        user = await self.economy.find_one({
+        item_name = self.select.values[0]
+
+        user = await self.bot.economy.find_one({
             "guild_id": str(interaction.guild.id),
             "user_id": str(interaction.user.id)
         })
 
-        if not user:
-            return await interaction.response.send_message("❌ No data found.", ephemeral=True)
+        if not user or item_name not in user.get("inventory", []):
+            return await interaction.response.send_message("❌ You don’t own this item.", ephemeral=True)
 
-        inventory = user.get("inventory", [])
+        # 💰 find item in shop for price
+        shop = await self.bot.shop.find_one({"guild_id": str(interaction.guild.id)})
 
-        # find item in inventory
-        item = next((i for i in inventory if i["item_id"] == item_id), None)
+        price = 0
+        if shop and shop.get("items"):
+            for i in shop["items"]:
+                if i["name"].lower() == item_name.lower():
+                    price = int(i["price"] * 0.5)  # sell = 50%
+                    break
 
-        if not item:
-            return await interaction.response.send_message("❌ You don't own this item.", ephemeral=True)
-
-        # get shop price for value reference
-        shop_data = await self.shop.find_one({"guild_id": str(interaction.guild.id)})
-
-        shop_item = None
-        if shop_data:
-            shop_item = next((i for i in shop_data.get("items", []) if i["item_id"] == item_id), None)
-
-        # fallback value
-        sell_price = int(shop_item["price"] * 0.6) if shop_item else 100
-
-        # remove item from inventory
-        new_inventory = [i for i in inventory if i["item_id"] != item_id]
-
-        await self.economy.update_one(
+        # remove item
+        await self.bot.economy.update_one(
             {"guild_id": str(interaction.guild.id), "user_id": str(interaction.user.id)},
             {
-                "$set": {"inventory": new_inventory},
-                "$inc": {"balance": sell_price}
+                "$pull": {"inventory": item_name},
+                "$inc": {"balance": price}
             }
         )
 
         await interaction.response.send_message(
-            f"💰 Sold **{item['name']}** for **${sell_price}**!",
+            f"💰 Sold **{item_name}** for **${price}**!",
             ephemeral=True
         )
 
@@ -77,7 +85,6 @@ class Sell(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.economy = bot.economy
-        self.shop = bot.shop
 
     @app_commands.command(name="sell", description="Sell items from your inventory")
     async def sell(self, interaction: discord.Interaction):
@@ -88,18 +95,13 @@ class Sell(commands.Cog):
         })
 
         if not user or not user.get("inventory"):
-            return await interaction.response.send_message(
-                "❌ You have no items to sell.",
-                ephemeral=True
-            )
+            return await interaction.response.send_message("📦 You have nothing to sell.")
+
+        items = user.get("inventory", [])
 
         await interaction.response.send_message(
-            "Select an item to sell:",
-            view=SellView(
-                user["inventory"],
-                self.shop,
-                self.economy
-            ),
+            "💰 Choose an item to sell:",
+            view=SellView(self.bot, items),
             ephemeral=True
         )
 
