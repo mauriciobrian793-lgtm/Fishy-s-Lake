@@ -17,7 +17,7 @@ async def save_settings(bot, guild_id, settings):
 
 
 # =========================
-# MODALS (EXISTING)
+# MODALS
 # =========================
 class IncomeRoleModal(discord.ui.Modal):
 
@@ -36,12 +36,16 @@ class IncomeRoleModal(discord.ui.Modal):
         try:
             amount = int(self.amount.value)
         except:
-            return await interaction.response.send_message("❌ Invalid number.", ephemeral=True)
+            return await interaction.response.send_message("❌ Invalid number", ephemeral=True)
 
         settings.setdefault("role_income", {})[self.role_id] = amount
+
         await save_settings(self.bot, interaction.guild.id, settings)
 
-        await interaction.response.send_message(f"💰 Saved <@&{self.role_id}> → ${amount}", ephemeral=True)
+        await interaction.response.send_message(
+            f"💰 Saved <@&{self.role_id}> → ${amount}",
+            ephemeral=True
+        )
 
 
 class CooldownModal(discord.ui.Modal):
@@ -61,17 +65,18 @@ class CooldownModal(discord.ui.Modal):
         try:
             seconds = int(self.seconds.value)
         except:
-            return await interaction.response.send_message("❌ Invalid number.", ephemeral=True)
+            return await interaction.response.send_message("❌ Invalid number", ephemeral=True)
 
         settings.setdefault("cooldowns", {})[self.command] = seconds
+
         await save_settings(self.bot, interaction.guild.id, settings)
 
-        await interaction.response.send_message(f"⏱ Saved {self.command} → {seconds}s", ephemeral=True)
+        await interaction.response.send_message(
+            f"⏱ Saved {self.command} → {seconds}s",
+            ephemeral=True
+        )
 
 
-# =========================
-# 🛒 SHOP ADD MODAL
-# =========================
 class ShopAddModal(discord.ui.Modal, title="🛒 Add Shop Item"):
 
     def __init__(self, bot):
@@ -93,7 +98,10 @@ class ShopAddModal(discord.ui.Modal, title="🛒 Add Shop Item"):
         except:
             return await interaction.response.send_message("❌ Invalid price", ephemeral=True)
 
-        item = {"name": self.name.value, "price": price}
+        item = {
+            "name": self.name.value,
+            "price": price
+        }
 
         if self.role.value:
             item["role"] = self.role.value
@@ -104,40 +112,63 @@ class ShopAddModal(discord.ui.Modal, title="🛒 Add Shop Item"):
             upsert=True
         )
 
-        await interaction.response.send_message("✅ Item added to shop", ephemeral=True)
+        await interaction.response.send_message("✅ Item added", ephemeral=True)
 
 
 # =========================
-# 🛒 SHOP DELETE MODAL
+# SHOP DELETE (FIXED DROPDOWN)
 # =========================
-class ShopDeleteModal(discord.ui.Modal, title="❌ Delete Shop Item"):
+class ShopDeleteView(discord.ui.View):
 
-    def __init__(self, bot):
-        super().__init__()
+    def __init__(self, bot, items):
+        super().__init__(timeout=60)
         self.bot = bot
 
-        self.name = TextInput(label="Item Name to Delete")
-        self.add_item(self.name)
+        options = [
+            discord.SelectOption(
+                label=f"{i['name']} - ${i['price']}",
+                value=i["name"]
+            )
+            for i in items
+        ]
 
-    async def on_submit(self, interaction: discord.Interaction):
+        self.select = discord.ui.Select(
+            placeholder="Select item to delete",
+            options=options
+        )
 
-        shop = await self.bot.shop.find_one({"guild_id": str(interaction.guild.id)})
+        self.select.callback = self.delete_callback
+        self.add_item(self.select)
+
+    async def delete_callback(self, interaction: discord.Interaction):
+
+        shop = await self.bot.shop.find_one(
+            {"guild_id": str(interaction.guild.id)}
+        )
 
         if not shop or not shop.get("items"):
-            return await interaction.response.send_message("❌ No shop items", ephemeral=True)
+            return await interaction.response.send_message("❌ No items found", ephemeral=True)
 
-        new_items = [i for i in shop["items"] if i["name"] != self.name.value]
+        selected = self.select.values[0]
+
+        new_items = [
+            i for i in shop["items"]
+            if i["name"] != selected
+        ]
 
         await self.bot.shop.update_one(
             {"guild_id": str(interaction.guild.id)},
             {"$set": {"items": new_items}}
         )
 
-        await interaction.response.send_message("🗑 Item deleted", ephemeral=True)
+        await interaction.response.send_message(
+            f"🗑 Deleted **{selected}**",
+            ephemeral=True
+        )
 
 
 # =========================
-# MAIN DROPDOWN
+# MAIN SELECT
 # =========================
 class MainSelect(discord.ui.Select):
 
@@ -172,7 +203,22 @@ class MainSelect(discord.ui.Select):
             await interaction.response.send_modal(ShopAddModal(interaction.client))
 
         elif choice == "shop_delete":
-            await interaction.response.send_modal(ShopDeleteModal(interaction.client))
+
+            shop = await interaction.client.shop.find_one(
+                {"guild_id": str(interaction.guild.id)}
+            )
+
+            if not shop or not shop.get("items"):
+                return await interaction.response.send_message(
+                    "❌ No shop items found",
+                    ephemeral=True
+                )
+
+            await interaction.response.send_message(
+                "🗑 Select item to delete:",
+                view=ShopDeleteView(interaction.client, shop["items"]),
+                ephemeral=True
+            )
 
 
 # =========================
@@ -189,6 +235,7 @@ class CommandSelect(discord.ui.Select):
             discord.SelectOption(label="blackjack"),
             discord.SelectOption(label="collect_income"),
         ]
+
         super().__init__(placeholder="Select command", options=options)
 
     async def callback(self, interaction: discord.Interaction):
@@ -263,19 +310,28 @@ class Dashboard(commands.Cog):
         settings = await get_settings(self.bot, interaction.guild.id)
         shop = await self.bot.shop.find_one({"guild_id": str(interaction.guild.id)})
 
-        embed = discord.Embed(title="⚙️ Economy Dashboard", color=discord.Color.blurple())
+        embed = discord.Embed(
+            title="⚙️ Economy Dashboard",
+            color=discord.Color.blurple()
+        )
 
-        embed.add_field(name="🛡 Admin Role",
-                        value=f"<@&{settings.get('admin_role_id')}>" if settings.get("admin_role_id") else "None",
-                        inline=False)
+        embed.add_field(
+            name="🛡 Admin Role",
+            value=f"<@&{settings.get('admin_role_id')}>" if settings.get("admin_role_id") else "None",
+            inline=False
+        )
 
-        embed.add_field(name="⏱ Cooldowns",
-                        value="\n".join([f"{k} → {v}s" for k, v in settings.get("cooldowns", {}).items()]) or "None",
-                        inline=False)
+        embed.add_field(
+            name="⏱ Cooldowns",
+            value="\n".join([f"{k} → {v}s" for k, v in settings.get("cooldowns", {}).items()]) or "None",
+            inline=False
+        )
 
-        embed.add_field(name="💼 Income Roles",
-                        value="\n".join([f"<@&{k}> → ${v}" for k, v in settings.get("role_income", {}).items()]) or "None",
-                        inline=False)
+        embed.add_field(
+            name="💼 Income Roles",
+            value="\n".join([f"<@&{k}> → ${v}" for k, v in settings.get("role_income", {}).items()]) or "None",
+            inline=False
+        )
 
         embed.add_field(
             name="🛒 Shop Items",
