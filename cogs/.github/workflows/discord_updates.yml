@@ -1,0 +1,53 @@
+name: Discord Updates
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send Discord Embed
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          AUTHOR: ${{ github.actor }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          URL: ${{ github.event.head_commit.url }}
+
+        run: |
+          curl -H "Content-Type: application/json" \
+          -X POST \
+          -d "{
+            \"embeds\": [{
+              \"title\": \"🚀 Bot Update\",
+              \"color\": 3447003,
+              \"fields\": [
+                {
+                  \"name\": \"Commit Message\",
+                  \"value\": \"$COMMIT_MESSAGE\"
+                },
+                {
+                  \"name\": \"Developer\",
+                  \"value\": \"$AUTHOR\"
+                },
+                {
+                  \"name\": \"Repo\",
+                  \"value\": \"$REPO\"
+                },
+                {
+                  \"name\": \"Branch\",
+                  \"value\": \"$BRANCH\"
+                },
+                {
+                  \"name\": \"Commit Link\",
+                  \"value\": \"$URL\"
+                }
+              ]
+            }]
+          }" \
+          "$DISCORD_WEBHOOK"
