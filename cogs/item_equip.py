@@ -1,85 +1,62 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from pymongo import ReturnDocument
 
 
-# =========================
-# DROPDOWN
-# =========================
-class EquipSelect(discord.ui.Select):
+class EquipView(discord.ui.View):
 
-    def __init__(self, items, user_inventory):
+    def __init__(self, items, shop, user_id, guild_id):
+        super().__init__(timeout=60)
+        self.shop = shop
+        self.user_id = user_id
+        self.guild_id = guild_id
 
-        options = []
+        options = [
+            discord.SelectOption(label=item["name"], value=item["item_id"])
+            for item in items
+        ]
 
-        for item in items:
-            if item["name"] in user_inventory:
-                options.append(
-                    discord.SelectOption(
-                        label=item["name"],
-                        description="Equip this item"
-                    )
-                )
-
-        if not options:
-            options = [
-                discord.SelectOption(
-                    label="No items",
-                    description="You don't own anything",
-                    value="none"
-                )
-            ]
-
-        super().__init__(
-            placeholder="Select item to equip",
+        self.select = discord.ui.Select(
+            placeholder="Choose item to equip",
             options=options
         )
 
-        self.items = items
+        self.select.callback = self.callback
+        self.add_item(self.select)
 
     async def callback(self, interaction: discord.Interaction):
 
-        if self.values[0] == "none":
-            return await interaction.response.send_message("❌ You own no items.", ephemeral=True)
+        item_id = self.select.values[0]
 
-        item_name = self.values[0]
+        shop_data = await self.shop.find_one({"guild_id": str(interaction.guild.id)})
 
-        # find item in shop
-        item = next((i for i in self.items if i["name"] == item_name), None)
+        item = next(
+            (i for i in shop_data["items"] if i["item_id"] == item_id),
+            None
+        )
 
-        if not item:
-            return await interaction.response.send_message("❌ Item not found.", ephemeral=True)
+        if not item or not item.get("role_id"):
+            return await interaction.response.send_message(
+                "❌ This item has no role.",
+                ephemeral=True
+            )
 
-        if not item.get("role"):
-            return await interaction.response.send_message("❌ This item has no role.", ephemeral=True)
-
-        role = interaction.guild.get_role(int(item["role"]))
+        role = interaction.guild.get_role(int(item["role_id"]))
 
         if not role:
-            return await interaction.response.send_message("❌ Role missing or deleted.", ephemeral=True)
+            return await interaction.response.send_message(
+                "❌ Role not found.",
+                ephemeral=True
+            )
 
         await interaction.user.add_roles(role)
 
         await interaction.response.send_message(
-            f"✅ Equipped **{item_name}** → {role.mention}",
+            f"✅ Equipped **{item['name']}**!",
             ephemeral=True
         )
 
 
-# =========================
-# VIEW
-# =========================
-class EquipView(discord.ui.View):
-
-    def __init__(self, items, inventory):
-        super().__init__(timeout=60)
-        self.add_item(EquipSelect(items, inventory))
-
-
-# =========================
-# COG
-# =========================
 class Equip(commands.Cog):
 
     def __init__(self, bot):
@@ -87,51 +64,27 @@ class Equip(commands.Cog):
         self.economy = bot.economy
         self.shop = bot.shop
 
-    async def get_user(self, guild_id, user_id, name):
-        return await self.economy.find_one_and_update(
-            {"guild_id": str(guild_id), "user_id": str(user_id)},
-            {
-                "$setOnInsert": {
-                    "guild_id": str(guild_id),
-                    "user_id": str(user_id),
-                    "name": name,
-                    "balance": 0,
-                    "bank": 0,
-                    "inventory": []
-                }
-            },
-            upsert=True,
-            return_document=ReturnDocument.AFTER
-        )
-
     @app_commands.command(name="equip", description="Equip an item")
     async def equip(self, interaction: discord.Interaction):
 
-        user = await self.get_user(
-            interaction.guild.id,
-            interaction.user.id,
-            interaction.user.name
-        )
+        user = await self.economy.find_one({
+            "guild_id": str(interaction.guild.id),
+            "user_id": str(interaction.user.id)
+        })
 
-        inventory = user.get("inventory", [])
-
-        if not inventory:
+        if not user or not user.get("inventory"):
             return await interaction.response.send_message(
-                "❌ You have no items.",
-                ephemeral=True
-            )
-
-        shop_data = await self.shop.find_one({"guild_id": str(interaction.guild.id)})
-
-        if not shop_data or not shop_data.get("items"):
-            return await interaction.response.send_message(
-                "❌ Shop is empty.",
-                ephemeral=True
+                "❌ You own no items."
             )
 
         await interaction.response.send_message(
-            "🎒 Choose an item to equip:",
-            view=EquipView(shop_data["items"], inventory),
+            "Select an item to equip:",
+            view=EquipView(
+                user["inventory"],
+                self.shop,
+                interaction.user.id,
+                interaction.guild.id
+            ),
             ephemeral=True
         )
 

@@ -9,24 +9,34 @@ class Shop(commands.Cog):
         self.bot = bot
         self.shop = bot.shop
 
-    @app_commands.command(name="shop", description="View the shop")
+    @app_commands.command(name="shop", description="View the server shop")
     async def shop(self, interaction: discord.Interaction):
 
-        data = await self.shop.find_one({"guild_id": str(interaction.guild.id)})
+        data = await self.shop.find_one({
+            "guild_id": str(interaction.guild.id)
+        })
 
         embed = discord.Embed(
             title="🛒 Server Shop",
+            description="Use `/buy <item name>` to purchase items.",
             color=discord.Color.blue()
         )
 
         if not data or not data.get("items"):
-            embed.description = "No items available."
+            embed.description = "The shop is currently empty."
             return await interaction.response.send_message(embed=embed)
 
         for item in data["items"]:
+
+            role_text = (
+                f"<@&{item['role_id']}>"
+                if item.get("role_id")
+                else "No role"
+            )
+
             embed.add_field(
-                name=item["name"],
-                value=f"💰 ${item['price']}" + (f"\n🎁 Role: <@&{item['role']}>" if item.get("role") else ""),
+                name=f"{item['name']} - ${item['price']}",
+                value=f"🎭 Role: {role_text}",
                 inline=False
             )
 
