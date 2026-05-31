@@ -62,3 +62,6 @@ class Buy(commands.Cog):
                 await interaction.user.add_roles(role)
 
         await interaction.response.send_message(f"✅ Bought **{item['name']}**!")
+
+async def setup(bot):
+    await bot.add_cog(Buy(bot))
