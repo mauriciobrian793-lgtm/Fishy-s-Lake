@@ -17,25 +17,43 @@ class Inventory(commands.Cog):
             "user_id": str(interaction.user.id)
         })
 
-        if not user or not user.get("inventory"):
-            return await interaction.response.send_message("📦 Your inventory is empty.")
+        if not user:
+            return await interaction.response.send_message("📦 You have no data yet.")
 
         raw_items = user.get("inventory", [])
 
-        # 🔧 FIX: support BOTH formats (string + dict)
-        items = []
-        for item in raw_items:
-            if isinstance(item, dict):
-                items.append(item.get("name", "Unknown Item"))
-            else:
-                items.append(str(item))
+        if not raw_items:
+            return await interaction.response.send_message("📦 Your inventory is empty.")
 
+        # =========================
+        # CLEAN INVENTORY (FIXED)
+        # =========================
+        clean_items = []
+
+        for item in raw_items:
+
+            # dict format: {"name": "..."}
+            if isinstance(item, dict):
+                name = item.get("name")
+                if name:
+                    clean_items.append(name)
+
+            # string format: "item"
+            elif isinstance(item, str):
+                clean_items.append(item)
+
+        # remove duplicates while keeping order
+        clean_items = list(dict.fromkeys(clean_items))
+
+        # =========================
+        # EMBED
+        # =========================
         embed = discord.Embed(
             title="🎒 Your Inventory",
             color=discord.Color.green()
         )
 
-        embed.description = "\n".join([f"• {i}" for i in items]) or "Empty"
+        embed.description = "\n".join(f"• {i}" for i in clean_items) or "Empty"
 
         await interaction.response.send_message(embed=embed)
 
