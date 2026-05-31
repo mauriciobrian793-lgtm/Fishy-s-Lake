@@ -237,6 +237,13 @@ class Dashboard(commands.Cog):
     @app_commands.command(name="dashboard")
     async def dashboard(self, interaction: discord.Interaction):
 
+
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message(
+                "❌ Admin only",
+                ephemeral=True
+            )
+
         settings = await get_settings(self.bot, interaction.guild.id)
         shop = await self.bot.shop.find_one({"guild_id": str(interaction.guild.id)})
 
